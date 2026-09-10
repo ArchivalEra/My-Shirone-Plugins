@@ -28,9 +28,24 @@ export function initWhatImDoing(options: WhatImDoingOptions = {}): void {
 		targetSelector:
 			options.targetSelector || 'a[aria-label="Go to About Page"]',
 		position: options.position || "beforebegin",
+		routeFilter: options.routeFilter ?? ["/MangoMesa"],
 	};
 
+	function isPathAllowed(): boolean {
+		if (!config.routeFilter || config.routeFilter.length === 0) {
+			return true;
+		}
+		const pathname = window.location.pathname;
+		return config.routeFilter.some((filter) => pathname.startsWith(filter));
+	}
+
 	function tryMount() {
+		// Strict on-intent lazy gating: only mount on permitted routes (e.g. /MangoMesa)
+		if (!isPathAllowed()) {
+			cleanup();
+			return;
+		}
+
 		// Avoid duplicate mounting
 		if (document.querySelector(".wid-mounted-portal")) {
 			return;

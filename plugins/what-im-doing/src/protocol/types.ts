@@ -10,6 +10,16 @@ export enum ActivityStatus {
 }
 
 /**
+ * Media playback info compatible with Mix Space / Shiro
+ */
+export interface MediaInfo {
+	title?: string;
+	artist?: string;
+	album?: string;
+	isPlaying?: boolean;
+}
+
+/**
  * Single activity event payload
  */
 export interface DeviceActivity {
@@ -21,7 +31,16 @@ export interface DeviceActivity {
 	status: ActivityStatus;
 	osInfo: string; // e.g. "Linux / Wayland (Plasma 6.7)"
 	idleSeconds: number;
+	media?: MediaInfo;
 	metadata?: Record<string, string>;
+
+	// Mix Space / Shiro compatibility aliases
+	process_name?: string;
+	process?: string;
+	media_title?: string;
+	media_artist?: string;
+	device?: string;
+	device_id?: string;
 }
 
 /**
@@ -80,6 +99,12 @@ export interface WhatImDoingOptions {
 	 * Secret token for authorized local mock endpoint updates
 	 */
 	authToken?: string;
+
+	/**
+	 * Restrict capsule loading to specific URL path prefixes
+	 * Default: ["/MangoMesa"]
+	 */
+	routeFilter?: string[];
 
 	/**
 	 * Enable built-in local dev mock endpoint under /api/activity

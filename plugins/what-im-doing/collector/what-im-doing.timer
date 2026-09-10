@@ -1,0 +1,11 @@
+[Unit]
+Description=Timer for What-Im-Doing Activity Collector
+After=graphical-session.target
+
+[Timer]
+OnBootSec=15s
+OnUnitActiveSec=15s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

@@ -21,14 +21,19 @@ let {
 } = $props();
 
 let data = $state<ActivityHistoryResponse | null>(null);
-let loading = $state(true);
+let briefLoading = $state(false);
+let historyLoading = $state(false);
+let historyLoaded = $state(false);
 let expanded = $state(false);
 let selectedDeviceId = $state<string>("all");
 let timerId: ReturnType<typeof setInterval> | null = null;
 let currentTime = $state(Date.now());
+let capsuleEl: HTMLElement | null = $state(null);
+let hasEnteredViewport = $state(false);
 
 // Clock tick every 10s to update relative time smoothly
 let clockTimer: ReturnType<typeof setInterval> | null = null;
+let observer: IntersectionObserver | null = null;
 
 const currentActivity = $derived(data?.current ?? null);
 const devices = $derived(data?.devices ?? []);
@@ -47,19 +52,64 @@ const formatted = $derived(
 	formatActivitySentence(currentActivity, currentTime, "zh"),
 );
 
-async function fetchActivity() {
+function getUrlWithParam(param: string): string {
+	const sep = endpoint.includes("?") ? "&" : "?";
+	return `${endpoint}${sep}${param}`;
+}
+
+async function fetchBriefStatus() {
+	if (briefLoading) return;
+	briefLoading = true;
 	try {
-		// Prefer Protobuf binary stream, fall back to JSON
-		const res = await fetch(endpoint, {
+		const targetUrl = getUrlWithParam("brief=1");
+		const res = await fetch(targetUrl, {
 			headers: {
 				Accept: "application/x-protobuf, application/json",
 			},
 		});
 
-		if (!res.ok) {
-			loading = false;
-			return;
+		if (!res.ok) return;
+
+		const contentType = res.headers.get("content-type") ?? "";
+		if (contentType.includes("application/x-protobuf")) {
+			const buffer = await res.arrayBuffer();
+			const decoded = decodeHistoryResponse(new Uint8Array(buffer));
+			// Preserve existing history if already loaded
+			data = {
+				current: decoded.current,
+				devices: decoded.devices.length > 0 ? decoded.devices : (data?.devices ?? []),
+				history: data?.history ?? [],
+				serverTime: decoded.serverTime,
+			};
+		} else {
+			const json = (await res.json()) as ActivityHistoryResponse;
+			data = {
+				current: json.current,
+				devices: json.devices?.length > 0 ? json.devices : (data?.devices ?? []),
+				history: data?.history ?? [],
+				serverTime: json.serverTime,
+			};
 		}
+		currentTime = Date.now();
+	} catch (err) {
+		console.debug("[what-im-doing] Brief status paused:", err);
+	} finally {
+		briefLoading = false;
+	}
+}
+
+async function fetchFullHistory() {
+	if (historyLoading) return;
+	historyLoading = true;
+	try {
+		const targetUrl = getUrlWithParam("history=1");
+		const res = await fetch(targetUrl, {
+			headers: {
+				Accept: "application/x-protobuf, application/json",
+			},
+		});
+
+		if (!res.ok) return;
 
 		const contentType = res.headers.get("content-type") ?? "";
 		if (contentType.includes("application/x-protobuf")) {
@@ -68,22 +118,47 @@ async function fetchActivity() {
 		} else {
 			data = (await res.json()) as ActivityHistoryResponse;
 		}
+		historyLoaded = true;
 		currentTime = Date.now();
 	} catch (err) {
-		console.debug("[what-im-doing] Status fetch paused:", err);
+		console.debug("[what-im-doing] History fetch paused:", err);
 	} finally {
-		loading = false;
+		historyLoading = false;
+	}
+}
+
+function startPolling() {
+	if (refreshInterval > 0 && !timerId) {
+		timerId = setInterval(() => {
+			if (document.visibilityState === "visible" && hasEnteredViewport) {
+				fetchBriefStatus();
+			}
+		}, refreshInterval);
+	}
+}
+
+function stopPolling() {
+	if (timerId) {
+		clearInterval(timerId);
+		timerId = null;
 	}
 }
 
 function handleVisibilityChange() {
-	if (document.visibilityState === "visible") {
-		fetchActivity();
+	if (document.visibilityState === "visible" && hasEnteredViewport) {
+		fetchBriefStatus();
+		startPolling();
+	} else if (document.visibilityState === "hidden") {
+		stopPolling();
 	}
 }
 
-function toggleExpand() {
+async function toggleExpand() {
 	expanded = !expanded;
+	// Strictly on-intent: Only request full history upon user interaction
+	if (expanded && !historyLoaded && !historyLoading) {
+		await fetchFullHistory();
+	}
 }
 
 function handleKeydown(e: KeyboardEvent) {
@@ -93,14 +168,29 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 onMount(() => {
-	fetchActivity();
-
-	if (refreshInterval > 0) {
-		timerId = setInterval(() => {
-			if (document.visibilityState === "visible") {
-				fetchActivity();
-			}
-		}, refreshInterval);
+	// Rule 2.4: Zero eager network fetch on mount.
+	// We wait for the capsule to actually enter the user's viewport.
+	if (typeof IntersectionObserver !== "undefined" && capsuleEl) {
+		observer = new IntersectionObserver(
+			(entries) => {
+				for (const entry of entries) {
+					if (entry.isIntersecting) {
+						hasEnteredViewport = true;
+						fetchBriefStatus();
+						startPolling();
+					} else {
+						stopPolling();
+					}
+				}
+			},
+			{ rootMargin: "50px" },
+		);
+		observer.observe(capsuleEl);
+	} else {
+		// Fallback if IntersectionObserver is unavailable
+		hasEnteredViewport = true;
+		fetchBriefStatus();
+		startPolling();
 	}
 
 	clockTimer = setInterval(() => {
@@ -111,15 +201,19 @@ onMount(() => {
 	window.addEventListener("keydown", handleKeydown);
 
 	return () => {
-		if (timerId) clearInterval(timerId);
+		stopPolling();
 		if (clockTimer) clearInterval(clockTimer);
+		if (observer) {
+			observer.disconnect();
+			observer = null;
+		}
 		document.removeEventListener("visibilitychange", handleVisibilityChange);
 		window.removeEventListener("keydown", handleKeydown);
 	};
 });
 </script>
 
-<div class={`wid-capsule-wrapper ${className}`}>
+<div bind:this={capsuleEl} class={`wid-capsule-wrapper ${className}`}>
 	<!-- 顶部状态胶囊 -->
 	<button
 		type="button"
@@ -185,6 +279,14 @@ onMount(() => {
 						<span class="wid-tag wid-tag--primary">{currentActivity.appName}</span>
 						<span class="wid-popover__current-device">{currentActivity.deviceName}</span>
 					</div>
+					{#if currentActivity.media?.title}
+						<div class="wid-popover__media">
+							<span class="wid-popover__media-icon">🎵</span>
+							<span class="wid-popover__media-text">
+								{currentActivity.media.title}{#if currentActivity.media.artist} — {currentActivity.media.artist}{/if}
+							</span>
+						</div>
+					{/if}
 					{#if currentActivity.windowTitle}
 						<div class="wid-popover__window-title" title={currentActivity.windowTitle}>
 							"{currentActivity.windowTitle}"
@@ -225,7 +327,9 @@ onMount(() => {
 			<!-- 历史时间轴 -->
 			<div class="wid-popover__history">
 				<div class="wid-popover__history-title">最近记录</div>
-				{#if filteredHistory.length === 0}
+				{#if historyLoading}
+					<div class="wid-popover__empty">正在拉取历史记录...</div>
+				{:else if filteredHistory.length === 0}
 					<div class="wid-popover__empty">暂无历史记录</div>
 				{:else}
 					<ul class="wid-timeline">
@@ -446,6 +550,31 @@ onMount(() => {
 .wid-popover__current-device {
 	font-size: 0.75rem;
 	color: var(--on-surface-variant, #49454f);
+}
+
+.wid-popover__media {
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	margin-bottom: 0.375rem;
+	padding: 0.25rem 0.5rem;
+	background: var(--surface-container-high, rgba(0, 0, 0, 0.04));
+	border-radius: 6px;
+	font-size: 0.75rem;
+}
+
+.wid-popover__media-icon {
+	flex-shrink: 0;
+	font-size: 0.8125rem;
+	line-height: 1;
+}
+
+.wid-popover__media-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--on-surface-variant, #49454f);
+	font-weight: 500;
 }
 
 .wid-popover__window-title {

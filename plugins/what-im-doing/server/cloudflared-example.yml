@@ -1,0 +1,17 @@
+# Cloudflared Tunnel Configuration for Oracle Cloud VPS
+# Location: /etc/cloudflared/config.yml
+# Run with: sudo systemctl enable --now cloudflared
+
+tunnel: <YOUR-TUNNEL-UUID>
+credentials-file: /etc/cloudflared/<YOUR-TUNNEL-UUID>.json
+
+ingress:
+  # Map public subdomain to local VPS hub daemon
+  - hostname: activity.isui.ren
+    service: http://127.0.0.1:8080
+    originRequest:
+      connectTimeout: 5s
+      noTLSVerify: false
+
+  # Default fallback 404
+  - service: http_status:404

@@ -1,0 +1,24 @@
+[Unit]
+Description=What-Im-Doing Oracle VPS Activity Hub (Protobuf/HTTP)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/what-im-doing
+Environment=PORT=8080
+Environment=HOST=127.0.0.1
+Environment=STATE_FILE=/var/lib/what-im-doing/state.json
+# Uncomment to enforce Bearer token authentication for POST requests
+# Environment=AUTH_TOKEN=your-secret-key-here
+ExecStart=/usr/bin/node /opt/what-im-doing/vps-hub.mjs
+Restart=always
+RestartSec=5
+LimitNOFILE=65535
+
+# Hardening
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

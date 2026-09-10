@@ -1,14 +1,20 @@
 [Unit]
-Description=What-Im-Doing Linux Activity Collector
+Description=What-Im-Doing Linux Activity Collector (KDE 6.7 / Wayland)
 After=graphical-session.target
 PartOf=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/node /mnt/hdd/zcode-on-the-move/My-Shirone-Plugins/plugins/what-im-doing/collector/collector.mjs
-Restart=always
+# Path to script, change to your repo path or /usr/local/bin/what-im-doing.sh
+ExecStart=%h/.local/bin/what-im-doing.sh
+Restart=on-failure
 RestartSec=10
-Environment=NODE_ENV=production
+Environment=ENDPOINT=https://activity.isui.ren/api/activity
+Environment=INTERVAL=15
+# Optional: Set unique device name/id for workstation or laptop
+# Environment=DEVICE_ID=workstation
+# Environment=DEVICE_NAME="Arch Linux (Workstation)"
+# Environment=AUTH_TOKEN=your-secret-token
 
 [Install]
 WantedBy=graphical-session.target

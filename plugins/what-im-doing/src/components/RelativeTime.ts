@@ -80,7 +80,16 @@ export function formatActivitySentence(
 	const dev = act.deviceName || act.deviceId || (lang === "zh" ? "Linux设备" : "Device");
 
 	let sentence = "";
-	if (lang === "zh") {
+	if (act.media?.title && isCurrentlyActive) {
+		const mediaText = act.media.artist
+			? `${act.media.title} - ${act.media.artist}`
+			: act.media.title;
+		if (lang === "zh") {
+			sentence = `正在 ${dev} 收听 ${mediaText}`;
+		} else {
+			sentence = `Listening to ${mediaText} on ${dev}`;
+		}
+	} else if (lang === "zh") {
 		if (isCurrentlyActive) {
 			sentence = `正在 ${dev} 使用 ${act.appName}`;
 		} else {

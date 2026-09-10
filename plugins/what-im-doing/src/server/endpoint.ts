@@ -33,7 +33,11 @@ export function createActivityEndpoint(config: EndpointConfig = {}) {
 
 		async GET(request: Request) {
 			const accept = request.headers.get("accept") ?? "";
-			const responseData = defaultStore.getResponse(maxDisplay);
+			const url = new URL(request.url);
+			const isBrief = url.searchParams.get("brief") === "1" || url.searchParams.get("brief") === "true";
+			const responseData = isBrief ? defaultStore.getBriefResponse() : defaultStore.getResponse(maxDisplay);
+
+			const cacheHeader = "public, max-age=10, s-maxage=15, stale-while-revalidate=30";
 
 			// Return Protobuf binary if requested
 			if (accept.includes("application/x-protobuf")) {
@@ -43,7 +47,7 @@ export function createActivityEndpoint(config: EndpointConfig = {}) {
 					headers: {
 						...CORS_HEADERS,
 						"Content-Type": "application/x-protobuf",
-						"Cache-Control": "no-store, no-cache, must-revalidate",
+						"Cache-Control": cacheHeader,
 					},
 				});
 			}
@@ -54,31 +58,47 @@ export function createActivityEndpoint(config: EndpointConfig = {}) {
 				headers: {
 					...CORS_HEADERS,
 					"Content-Type": "application/json; charset=utf-8",
-					"Cache-Control": "no-store, no-cache, must-revalidate",
+					"Cache-Control": cacheHeader,
 				},
 			});
 		},
 
 		async POST(request: Request) {
-			// Check auth token if configured
-			if (config.authToken) {
-				const authHeader = request.headers.get("authorization") ?? "";
-				const expectedBearer = `Bearer ${config.authToken}`;
-				if (authHeader !== expectedBearer) {
-					return new Response(JSON.stringify({ error: "Unauthorized" }), {
-						status: 401,
-						headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-					});
-				}
-			}
+			const url = new URL(request.url);
+			const authHeader = request.headers.get("authorization") ?? "";
+			const queryKey = url.searchParams.get("key");
+
+			let body: Record<string, unknown> | null = null;
+			let bytes: Uint8Array | null = null;
 
 			const contentType = request.headers.get("content-type") ?? "";
 
 			try {
 				if (contentType.includes("application/x-protobuf")) {
 					const arrayBuffer = await request.arrayBuffer();
-					const bytes = new Uint8Array(arrayBuffer);
+					bytes = new Uint8Array(arrayBuffer);
+				} else {
+					body = (await request.json()) as Record<string, unknown>;
+				}
 
+				// Check auth token if configured (supports Bearer token, ?key=, or body.api_key / body.key)
+				if (config.authToken) {
+					const expectedBearer = `Bearer ${config.authToken}`;
+					const bodyKey = body ? (body.api_key as string) || (body.key as string) : undefined;
+					const isAuthorized =
+						authHeader === expectedBearer ||
+						queryKey === config.authToken ||
+						bodyKey === config.authToken;
+
+					if (!isAuthorized) {
+						return new Response(JSON.stringify({ error: "Unauthorized" }), {
+							status: 401,
+							headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+						});
+					}
+				}
+
+				if (bytes) {
 					// Try batch upload first, fallback to single activity
 					try {
 						const batch = decodeBatchUploadRequest(bytes);
@@ -103,9 +123,8 @@ export function createActivityEndpoint(config: EndpointConfig = {}) {
 							});
 						}
 					}
-				} else {
-					// JSON upload
-					const body = await request.json();
+				} else if (body) {
+					// JSON upload (supports standard and Mix Space / Shiro formats)
 					if (Array.isArray(body.events)) {
 						defaultStore.recordBatch(body.events as DeviceActivity[]);
 						return new Response(
@@ -116,8 +135,17 @@ export function createActivityEndpoint(config: EndpointConfig = {}) {
 							},
 						);
 					}
-					if (body.deviceId) {
-						defaultStore.record(body as DeviceActivity);
+
+					// Single item check (our schema or Mix Space schema)
+					const hasValidField =
+						body.deviceId ||
+						body.device_id ||
+						body.appName ||
+						body.process_name ||
+						body.process;
+
+					if (hasValidField) {
+						defaultStore.record(body as unknown as DeviceActivity);
 						return new Response(JSON.stringify({ success: true, count: 1 }), {
 							status: 200,
 							headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
