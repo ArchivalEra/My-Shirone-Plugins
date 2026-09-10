@@ -153,11 +153,39 @@ function handleVisibilityChange() {
 	}
 }
 
+function portal(node: HTMLElement) {
+	document.body.appendChild(node);
+	return {
+		destroy() {
+			if (node.parentNode) {
+				node.parentNode.removeChild(node);
+			}
+		},
+	};
+}
+
+let desktopLeft = $state(0);
+let desktopBottom = $state(0);
+let isMobile = $state(false);
+
+function updatePosition() {
+	if (typeof window === "undefined") return;
+	isMobile = window.innerWidth < 768;
+	if (!capsuleEl) return;
+	const rect = capsuleEl.getBoundingClientRect();
+	desktopLeft = Math.round(rect.left + rect.width / 2);
+	// Distance from viewport bottom to capsule top, with 12px margin
+	desktopBottom = Math.max(16, Math.round(window.innerHeight - rect.top + 12));
+}
+
 async function toggleExpand() {
 	expanded = !expanded;
-	// Strictly on-intent: Only request full history upon user interaction
-	if (expanded && !historyLoaded && !historyLoading) {
-		await fetchFullHistory();
+	if (expanded) {
+		updatePosition();
+		// Strictly on-intent: Only request full history upon user interaction
+		if (!historyLoaded && !historyLoading) {
+			await fetchFullHistory();
+		}
 	}
 }
 
@@ -197,6 +225,14 @@ onMount(() => {
 		currentTime = Date.now();
 	}, 10000);
 
+	const handleScrollOrResize = () => {
+		if (expanded) {
+			updatePosition();
+		}
+	};
+
+	window.addEventListener("resize", handleScrollOrResize);
+	window.addEventListener("scroll", handleScrollOrResize, { passive: true });
 	document.addEventListener("visibilitychange", handleVisibilityChange);
 	window.addEventListener("keydown", handleKeydown);
 
@@ -207,6 +243,8 @@ onMount(() => {
 			observer.disconnect();
 			observer = null;
 		}
+		window.removeEventListener("resize", handleScrollOrResize);
+		window.removeEventListener("scroll", handleScrollOrResize);
 		document.removeEventListener("visibilitychange", handleVisibilityChange);
 		window.removeEventListener("keydown", handleKeydown);
 	};
@@ -248,10 +286,40 @@ onMount(() => {
 			/>
 		</svg>
 	</button>
+</div>
 
-	<!-- 展开抽屉/详情卡片 -->
-	{#if expanded}
-		<div class="wid-popover" role="dialog" aria-modal="true">
+<!-- 展开态：通过 Svelte action:portal 挂载至 document.body，彻底打破 Card 的 overflow: hidden 物理限制 -->
+{#if expanded}
+	<div use:portal class="wid-portal-layer">
+		<!-- 暗色半透明磨砂遮罩（点击收起） -->
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<div
+			class="wid-scrim"
+			onclick={() => (expanded = false)}
+			role="presentation"
+		></div>
+
+		<!-- 桌面端向上独立悬浮卡片 / 手机端原生 M3 底部抽屉 (Bottom Sheet) -->
+		<div
+			class="wid-popover"
+			class:wid-popover--mobile={isMobile}
+			role="dialog"
+			aria-modal="true"
+			aria-label="设备与活动状态详情"
+			style={!isMobile
+				? `--wid-bottom: ${desktopBottom}px; --wid-left: ${desktopLeft}px;`
+				: ""}
+		>
+			<!-- 桌面端向下呼应锚点指示箭头 -->
+			{#if !isMobile}
+				<div class="wid-popover__anchor-arrow" aria-hidden="true"></div>
+			{/if}
+
+			<!-- 手机端 M3 Drag Handle 拖拽把手条 -->
+			{#if isMobile}
+				<div class="wid-popover__drag-handle" aria-hidden="true"></div>
+			{/if}
+
 			<div class="wid-popover__header">
 				<div class="wid-popover__title">
 					<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
@@ -361,8 +429,8 @@ onMount(() => {
 				<span class="wid-popover__pulse-rate">每 {Math.round(refreshInterval / 1000)}s 同步</span>
 			</div>
 		</div>
-	{/if}
-</div>
+	</div>
+{/if}
 
 <style>
 .wid-capsule-wrapper {
@@ -370,23 +438,24 @@ onMount(() => {
 	width: 100%;
 	display: flex;
 	justify-content: center;
-	margin-bottom: 0.75rem;
-	z-index: 40;
+	margin-bottom: -10px;
+	z-index: 30;
+	pointer-events: auto;
 }
 
 .wid-capsule {
 	display: inline-flex;
 	align-items: center;
-	gap: 0.5rem;
-	max-width: 100%;
-	padding: 0.375rem 0.875rem;
+	gap: 0.375rem;
+	max-width: min(88%, 210px);
+	padding: 0.25rem 0.625rem;
 	border-radius: 9999px;
-	background: color-mix(in oklab, var(--card-bg, #ffffff) 85%, transparent);
-	backdrop-filter: blur(12px);
-	-webkit-backdrop-filter: blur(12px);
+	background: color-mix(in oklab, var(--card-bg, #ffffff) 88%, transparent);
+	backdrop-filter: blur(14px);
+	-webkit-backdrop-filter: blur(14px);
 	border: 1px solid var(--outline-variant, rgba(0, 0, 0, 0.12));
-	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-	font-size: 0.8125rem;
+	box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+	font-size: 0.725rem;
 	line-height: 1.25;
 	color: var(--on-surface, #1c1b1f);
 	cursor: pointer;
@@ -397,8 +466,8 @@ onMount(() => {
 
 .wid-capsule:hover {
 	border-color: var(--primary, #6750a4);
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-	transform: translateY(-1px);
+	box-shadow: 0 8px 20px rgba(0, 0, 0, 0.14);
+	transform: translateY(-2px) scale(1.02);
 }
 
 .wid-capsule__dot-ring {
@@ -465,30 +534,124 @@ onMount(() => {
 	transform: rotate(180deg);
 }
 
-/* 展开弹窗卡片 */
-.wid-popover {
-	position: absolute;
-	top: calc(100% + 8px);
-	left: 50%;
-	transform: translateX(-50%);
-	width: min(92vw, 360px);
-	background: var(--card-bg, #ffffff);
-	border: 1px solid var(--outline-variant, rgba(0, 0, 0, 0.15));
-	border-radius: 16px;
-	padding: 1rem;
-	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
-	z-index: 100;
-	animation: wid-slide-down 0.2s cubic-bezier(0.2, 0, 0, 1);
+/* Portal 独立容器与遮罩 */
+.wid-portal-layer {
+	position: fixed;
+	inset: 0;
+	z-index: 9999;
+	pointer-events: none;
 }
 
-@keyframes wid-slide-down {
+.wid-scrim {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.45);
+	backdrop-filter: blur(4px);
+	-webkit-backdrop-filter: blur(4px);
+	pointer-events: auto;
+	animation: wid-fade-in 0.2s cubic-bezier(0, 0, 0.2, 1);
+}
+
+@keyframes wid-fade-in {
 	from {
 		opacity: 0;
-		transform: translate(-50%, -6px);
 	}
 	to {
 		opacity: 1;
-		transform: translate(-50%, 0);
+	}
+}
+
+/* 桌面端独立悬浮卡片：严格向上展开 */
+.wid-popover {
+	position: fixed;
+	pointer-events: auto;
+	bottom: var(--wid-bottom, 120px);
+	left: var(--wid-left, 50%);
+	transform: translateX(-50%);
+	width: min(92vw, 360px);
+	max-height: calc(100vh - 120px);
+	overflow-y: auto;
+	background: var(--card-bg, #ffffff);
+	border: 1px solid var(--outline-variant, rgba(0, 0, 0, 0.15));
+	border-radius: 20px;
+	padding: 1.125rem;
+	box-shadow: 0 16px 48px rgba(0, 0, 0, 0.22), 0 4px 16px rgba(0, 0, 0, 0.08);
+	backdrop-filter: blur(24px);
+	-webkit-backdrop-filter: blur(24px);
+	z-index: 10000;
+	animation: wid-pop-up 0.24s cubic-bezier(0.05, 0.7, 0.1, 1);
+}
+
+@keyframes wid-pop-up {
+	from {
+		opacity: 0;
+		transform: translate(-50%, 12px) scale(0.96);
+	}
+	to {
+		opacity: 1;
+		transform: translate(-50%, 0) scale(1);
+	}
+}
+
+.wid-popover__anchor-arrow {
+	display: block;
+	position: absolute;
+	bottom: -6px;
+	left: 50%;
+	transform: translateX(-50%) rotate(45deg);
+	width: 12px;
+	height: 12px;
+	background: var(--card-bg, #ffffff);
+	border-right: 1px solid var(--outline-variant, rgba(0, 0, 0, 0.15));
+	border-bottom: 1px solid var(--outline-variant, rgba(0, 0, 0, 0.15));
+	z-index: 1;
+}
+
+.wid-popover__drag-handle {
+	display: none;
+}
+
+/* 手机端原生 Material 3 Modal Bottom Sheet */
+@media (max-width: 767px) {
+	.wid-popover,
+	.wid-popover--mobile {
+		bottom: 0 !important;
+		left: 0 !important;
+		right: 0 !important;
+		transform: none !important;
+		width: 100vw !important;
+		max-width: 100vw !important;
+		max-height: 84vh !important;
+		border-radius: 28px 28px 0 0 !important;
+		border-left: none !important;
+		border-right: none !important;
+		border-bottom: none !important;
+		border-top: 1px solid var(--outline-variant, rgba(0, 0, 0, 0.15)) !important;
+		padding: 0.75rem 1.25rem calc(1.5rem + env(safe-area-inset-bottom, 0px)) !important;
+		box-shadow: 0 -8px 36px rgba(0, 0, 0, 0.25) !important;
+		animation: wid-slide-up 0.28s cubic-bezier(0.05, 0.7, 0.1, 1) !important;
+	}
+
+	.wid-popover__anchor-arrow {
+		display: none !important;
+	}
+
+	.wid-popover__drag-handle {
+		display: block !important;
+		width: 36px;
+		height: 4px;
+		border-radius: 9999px;
+		background: var(--outline-variant, rgba(0, 0, 0, 0.3));
+		margin: 2px auto 14px;
+	}
+}
+
+@keyframes wid-slide-up {
+	from {
+		transform: translateY(100%);
+	}
+	to {
+		transform: translateY(0);
 	}
 }
 
