@@ -116,7 +116,22 @@ export function initWhatImDoing(options: WhatImDoingOptions = {}): void {
 	}
 }
 
-// Auto-run if config was injected onto window
-if (typeof window !== "undefined" && window.__WHAT_IM_DOING_CONFIG__) {
-	initWhatImDoing(window.__WHAT_IM_DOING_CONFIG__);
+function autoInit() {
+	if (typeof window !== "undefined" && window.__WHAT_IM_DOING_CONFIG__ && !window.__WHAT_IM_DOING_MOUNTED__) {
+		window.__WHAT_IM_DOING_MOUNTED__ = true;
+		initWhatImDoing(window.__WHAT_IM_DOING_CONFIG__);
+	}
+}
+
+if (typeof window !== "undefined") {
+	window.addEventListener("what-im-doing:init", () => autoInit());
+	if (window.__WHAT_IM_DOING_CONFIG__) {
+		autoInit();
+	} else {
+		if (document.readyState === "loading") {
+			document.addEventListener("DOMContentLoaded", () => autoInit());
+		} else {
+			setTimeout(autoInit, 0);
+		}
+	}
 }

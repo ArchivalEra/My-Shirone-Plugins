@@ -20,7 +20,7 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp src/components/WhatImDoingCapsule.svelte dist/components/",
     "test": "pnpm run build && node --test tests/**/*.test.mjs",
     "format": "biome format --write ./src ./tests ./collector",
     "collector": "node collector/collector.mjs"

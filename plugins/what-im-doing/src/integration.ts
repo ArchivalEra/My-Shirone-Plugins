@@ -24,11 +24,16 @@ export function whatImDoing(options: WhatImDoingOptions = {}): AstroIntegration 
 				// Inject client mounting runtime
 				injectScript(
 					"page",
-					`window.__WHAT_IM_DOING_CONFIG__ = ${JSON.stringify(options)}; import("${clientScriptPath}");`,
+					`import "${clientScriptPath}";
+if (typeof window !== "undefined") {
+	window.__WHAT_IM_DOING_CONFIG__ = ${JSON.stringify(options)};
+	window.dispatchEvent(new CustomEvent("what-im-doing:init"));
+}`,
 				);
 
 				// Optional local dev API route injection
-				if (options.enableLocalEndpoint !== false) {
+				const isRelativeEndpoint = !options.endpoint || options.endpoint.startsWith("/");
+				if (options.enableLocalEndpoint === true || (options.enableLocalEndpoint !== false && isRelativeEndpoint)) {
 					let routePath = fileURLToPath(
 						new URL("./server/route.ts", import.meta.url),
 					);
@@ -39,7 +44,7 @@ export function whatImDoing(options: WhatImDoingOptions = {}): AstroIntegration 
 					}
 
 					injectRoute({
-						pattern: options.endpoint || "/api/activity",
+						pattern: isRelativeEndpoint ? (options.endpoint || "/api/activity") : "/api/activity",
 						entrypoint: routePath,
 					});
 				}
