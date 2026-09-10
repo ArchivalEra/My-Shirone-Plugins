@@ -1,0 +1,14 @@
+[Unit]
+Description=What-Im-Doing Linux Activity Collector
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node /mnt/hdd/zcode-on-the-move/My-Shirone-Plugins/plugins/what-im-doing/collector/collector.mjs
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=graphical-session.target

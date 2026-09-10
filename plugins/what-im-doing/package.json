@@ -1,0 +1,51 @@
+{
+  "name": "@shirone-plugins/what-im-doing",
+  "version": "1.0.0",
+  "description": "Zero-intrusion Linux activity collector, Protobuf protocol, and M3 status capsule for Shirone.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./protocol": {
+      "types": "./dist/protocol/index.d.ts",
+      "import": "./dist/protocol/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "pnpm run build && node --test tests/**/*.test.mjs",
+    "format": "biome format --write ./src ./tests ./collector",
+    "collector": "node collector/collector.mjs"
+  },
+  "keywords": [
+    "astro",
+    "shirone",
+    "shirone-plugin",
+    "protobuf",
+    "activity-tracker",
+    "wayland",
+    "kde"
+  ],
+  "author": "ArchivalEra",
+  "license": "MIT",
+  "peerDependencies": {
+    "astro": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "astro": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.3"
+  }
+}

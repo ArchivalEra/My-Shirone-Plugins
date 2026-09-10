@@ -1,0 +1,7 @@
+{
+  "endpoint": "https://isui.ren/api/activity",
+  "token": "your-secret-token-here",
+  "deviceId": "arch-desktop",
+  "deviceName": "Arch Linux (KDE 6.7)",
+  "intervalSeconds": 15
+}

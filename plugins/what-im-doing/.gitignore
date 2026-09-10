@@ -1,0 +1,4 @@
+node_modules/
+dist/
+collector.config.json
+*.log

@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package what_im_doing;
+
+// Device status indicator
+enum ActivityStatus {
+  ACTIVITY_STATUS_UNKNOWN = 0;
+  ACTIVE = 1;      // User actively interacting within recent threshold (< 5 mins)
+  IDLE = 2;        // User idle or system locked
+  AWAY = 3;        // No input for extended duration (> 30 mins)
+  OFFLINE = 4;     // Device shut down or collector disconnected
+}
+
+// Single activity record from a device
+message DeviceActivity {
+  int64 timestamp = 1;            // Unix epoch time in milliseconds
+  string device_id = 2;           // Unique device identifier (e.g. "arch-pc", "laptop-kde")
+  string device_name = 3;         // Friendly display name (e.g. "Arch Linux (KDE 6.7)")
+  string app_name = 4;            // Active application name (e.g. "Antigravity", "Firefox")
+  string window_title = 5;        // Window title bar text (e.g. "isui.ren-Blog - Antigravity")
+  ActivityStatus status = 6;      // Active/Idle/Away status
+  string os_info = 7;             // OS & desktop env details (e.g. "Linux / Wayland (Plasma 6.7)")
+  int64 idle_seconds = 8;         // Seconds of user inactivity
+  map<string, string> metadata = 9; // Extensible key-value metadata
+}
+
+// Batch upload payload from collector daemon
+message ActivityBatchUploadRequest {
+  string token = 1;               // Secret bearer token for authentication
+  repeated DeviceActivity events = 2; // Batched events
+}
+
+// Response returned to blog frontend
+message ActivityHistoryResponse {
+  DeviceActivity current = 1;            // The most recent overall active activity
+  repeated DeviceActivity devices = 2;    // Latest state of each registered device
+  repeated DeviceActivity history = 3;    // Last N historical events
+  int64 server_time = 4;                 // Server timestamp for time-drift correction
+}
