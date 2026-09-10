@@ -42,13 +42,27 @@ get_active_app_and_title() {
         fi
     fi
 
-    # Strategy 2: qdbus6 / qdbus KWin activeClient
+    # Strategy 2: KDE 6 KWin Scripting via D-Bus (native Wayland, sub-100ms)
     if [[ -z "$app" && -n "$DBUS_CMD" ]]; then
-        local kwin_client
-        kwin_client=$($DBUS_CMD org.kde.KWin /KWin org.kde.KWin.activeClient 2>/dev/null || true)
-        if [[ -n "$kwin_client" ]]; then
-            title=$($DBUS_CMD org.kde.KWin /KWin org.kde.KWin.queryWindowInfo "$kwin_client" 2>/dev/null || true)
-            app=$(echo "$title" | awk -F ' — | - ' '{print $NF}')
+        local tmp_script="/tmp/wid_kwin_$$.js"
+        cat << 'EOF' > "$tmp_script"
+if (workspace.activeWindow) {
+    print("WID_WIN:" + (workspace.activeWindow.resourceClass || "") + ":::" + (workspace.activeWindow.caption || ""));
+} else {
+    print("WID_WIN:::Desktop");
+}
+EOF
+        local plugin_name="wid_active_$$"
+        $DBUS_CMD org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript "$tmp_script" "$plugin_name" >/dev/null 2>&1 || true
+        $DBUS_CMD org.kde.KWin /Scripting org.kde.kwin.Scripting.start >/dev/null 2>&1 || true
+        $DBUS_CMD org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript "$plugin_name" >/dev/null 2>&1 || true
+        rm -f "$tmp_script"
+
+        local raw_win
+        raw_win=$(journalctl --user -u plasma-kwin_wayland -n 15 --no-pager 2>/dev/null | grep -a "WID_WIN:" | tail -n 1 | sed 's/.*WID_WIN://' || true)
+        if [[ -n "$raw_win" ]]; then
+            app="${raw_win%%:::*}"
+            title="${raw_win##*:::}"
         fi
     fi
 
@@ -59,12 +73,21 @@ get_active_app_and_title() {
     fi
 
     # Format common app names cleanly
-    case "$app" in
-        *antigravity*|*Antigravity*) app="Antigravity" ;;
-        *chrome*|*google-chrome*)    app="Google Chrome" ;;
+    case "${app,,}" in
+        *zcode*)                     app="ZCode" ;;
+        *antigravity*)               app="Antigravity" ;;
+        *google-chrome*|*chrome*|*chromium*) app="Google Chrome" ;;
         *firefox*)                   app="Firefox" ;;
-        *code*|*Code*)               app="Visual Studio Code" ;;
+        *code*|*vscode*)             app="Visual Studio Code" ;;
+        *cursor*)                    app="Cursor" ;;
         *alacritty*|*kitty*|*konsole*) app="Terminal" ;;
+        *dolphin*)                   app="Dolphin" ;;
+        *zen*)                       app="Zen Browser" ;;
+        *obsidian*)                  app="Obsidian" ;;
+        *telegram*)                  app="Telegram" ;;
+        *discord*)                   app="Discord" ;;
+        *wechat*)                    app="WeChat" ;;
+        "")                          app="Desktop"; title="Desktop" ;;
     esac
 
     echo "${app}:::${title}"
