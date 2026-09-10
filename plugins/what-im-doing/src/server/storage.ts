@@ -45,9 +45,15 @@ export class ActivityStore {
 	 * Builds an ActivityHistoryResponse for frontend consumption
 	 */
 	getResponse(maxDisplay = 5): ActivityHistoryResponse {
-		const devicesList = Array.from(this.devices.values()).sort(
-			(a, b) => b.timestamp - a.timestamp,
-		);
+		const devicesList = Array.from(this.devices.values()).sort((a, b) => {
+			const aIsActive = a.status === 1 && (a.idleSeconds || 0) < 180 ? 1 : 0;
+			const bIsActive = b.status === 1 && (b.idleSeconds || 0) < 180 ? 1 : 0;
+			if (aIsActive !== bIsActive) return bIsActive - aIsActive;
+			if ((a.idleSeconds || 0) !== (b.idleSeconds || 0)) {
+				return (a.idleSeconds || 0) - (b.idleSeconds || 0);
+			}
+			return b.timestamp - a.timestamp;
+		});
 
 		const current = devicesList.length > 0 ? devicesList[0] : null;
 

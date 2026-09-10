@@ -206,7 +206,18 @@ export default {
 				}
 			}
 
-			devices.sort((a, b) => b.timestamp - a.timestamp);
+			// Smart Multi-Device Arbitration:
+			// Active devices (idle < 180s) take precedence over idle devices;
+			// lower idle time wins; later timestamp breaks ties.
+			devices.sort((a, b) => {
+				const aIsActive = (a.status === 1 || a.status === "ACTIVE") && (a.idleSeconds || 0) < 180 ? 1 : 0;
+				const bIsActive = (b.status === 1 || b.status === "ACTIVE") && (b.idleSeconds || 0) < 180 ? 1 : 0;
+				if (aIsActive !== bIsActive) return bIsActive - aIsActive;
+				if ((a.idleSeconds || 0) !== (b.idleSeconds || 0)) {
+					return (a.idleSeconds || 0) - (b.idleSeconds || 0);
+				}
+				return b.timestamp - a.timestamp;
+			});
 			const current = devices.length > 0 ? devices[0] : null;
 
 			const responseData = {
