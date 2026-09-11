@@ -1,7 +1,14 @@
-import { existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import type { AstroIntegration } from "astro";
 import type { WhatImDoingOptions } from "./protocol/types.js";
+
+export interface AstroIntegrationLike {
+	name: string;
+	hooks: {
+		"astro:config:setup"?: (params: {
+			injectScript: (stage: string, content: string) => void;
+			injectRoute: (route: { pattern: string; entrypoint: string }) => void;
+		}) => void;
+	};
+}
 
 /**
  * Astro Integration for what-im-doing
@@ -9,19 +16,15 @@ import type { WhatImDoingOptions } from "./protocol/types.js";
  */
 export function whatImDoing(
 	options: WhatImDoingOptions = {},
-): AstroIntegration {
+): AstroIntegrationLike {
 	return {
 		name: "@shirone-plugins/what-im-doing",
 		hooks: {
 			"astro:config:setup": ({ injectScript, injectRoute }) => {
-				let clientScriptPath = fileURLToPath(
-					new URL("./runtime/client-mount.ts", import.meta.url),
-				);
-				if (!existsSync(clientScriptPath)) {
-					clientScriptPath = fileURLToPath(
-						new URL("./runtime/client-mount.js", import.meta.url),
-					);
-				}
+				const clientScriptPath = new URL(
+					"./runtime/client-mount.js",
+					import.meta.url,
+				).pathname;
 
 				// Inject client mounting runtime
 				injectScript(
@@ -40,14 +43,8 @@ if (typeof window !== "undefined") {
 					options.enableLocalEndpoint === true ||
 					(options.enableLocalEndpoint !== false && isRelativeEndpoint)
 				) {
-					let routePath = fileURLToPath(
-						new URL("./server/route.ts", import.meta.url),
-					);
-					if (!existsSync(routePath)) {
-						routePath = fileURLToPath(
-							new URL("./server/route.js", import.meta.url),
-						);
-					}
+					const routePath = new URL("./server/route.js", import.meta.url)
+						.pathname;
 
 					injectRoute({
 						pattern: isRelativeEndpoint
