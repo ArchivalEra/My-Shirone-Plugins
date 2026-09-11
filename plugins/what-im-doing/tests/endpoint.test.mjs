@@ -50,7 +50,7 @@ test("Endpoint - POST Protobuf binary and GET Protobuf binary", async () => {
 		deviceId: "kde-wayland",
 		deviceName: "KDE Plasma 6.7",
 		appName: "Firefox",
-		windowTitle: "isui.ren",
+		windowTitle: "Documentation - Browser",
 		status: ActivityStatus.ACTIVE,
 		osInfo: "Linux 6.12",
 		idleSeconds: 0,

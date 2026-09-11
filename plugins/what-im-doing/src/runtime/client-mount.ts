@@ -28,7 +28,7 @@ export function initWhatImDoing(options: WhatImDoingOptions = {}): void {
 		targetSelector:
 			options.targetSelector || 'a[aria-label="Go to About Page"]',
 		position: options.position || "beforebegin",
-		routeFilter: options.routeFilter ?? ["/MangoMesa"],
+		routeFilter: options.routeFilter,
 	};
 
 	function isPathAllowed(): boolean {

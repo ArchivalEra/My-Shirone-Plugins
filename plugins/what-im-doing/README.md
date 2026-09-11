@@ -23,14 +23,14 @@
 │  • In-memory ring buffer (up to 5,000 events) + state file  │
 │  • Exposes GET /api/activity?brief=1 and ?history=1         │
 │  • Exposes GET /api/activity/stream (SSE real-time push)    │
-│  • Exposed via cloudflared tunnel (activity.isui.ren)       │
+│  • Exposed via cloudflared tunnel (activity.your-domain.com)│
 └──────────────────────────────┬──────────────────────────────┘
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  Shirone Blog Frontend (WhatImDoingCapsule.svelte)          │
 │  • Strict Rule 2.4 On-Intent Lazy Loading Contract:         │
-│    1. Only mounts on author profile page (/MangoMesa)       │
+│    1. Only mounts on targeted pages (e.g. /about)           │
 │    2. IntersectionObserver: only fetches when in viewport   │
 │    3. History drawer is strictly deferred until user click  │
 │    4. Immediate pause when document is hidden / navigated   │
@@ -59,16 +59,16 @@ import whatImDoing from "@shirone-plugins/what-im-doing";
 export default defineConfig({
   integrations: [
     whatImDoing({
-      // Your Oracle VPS endpoint or EdgeOne proxy
-      endpoint: "https://activity.isui.ren/api/activity",
+      // Your Worker endpoint, Oracle VPS endpoint, or EdgeOne proxy
+      endpoint: "https://activity.your-domain.com/api/activity",
       // Maximum history items to show in the dropdown drawer
       maxHistoryDisplay: 5,
       // Client brief status refresh interval (ms). Default: 30000 (30s)
       refreshInterval: 30000,
       // Target selector to place the capsule above (defaults to avatar)
       targetSelector: 'a[aria-label="Go to About Page"]',
-      // Restrict mounting strictly to author profile routes
-      routeFilter: ["/MangoMesa"],
+      // Optional: restrict mounting strictly to specific routes (e.g. /about)
+      // routeFilter: ["/about"],
       // Optional Bearer token for authorized uploads
       authToken: process.env.ACTIVITY_TOKEN,
     }),
@@ -114,7 +114,7 @@ tunnel: <YOUR-TUNNEL-UUID>
 credentials-file: /etc/cloudflared/<YOUR-TUNNEL-UUID>.json
 
 ingress:
-  - hostname: activity.isui.ren
+  - hostname: activity.your-domain.com
     service: http://127.0.0.1:8080
   - service: http_status:404
 ```
@@ -124,7 +124,7 @@ Restart cloudflared:
 sudo systemctl restart cloudflared
 ```
 
-Your hub is now accessible globally at `https://activity.isui.ren/api/activity` with free SSL, DDoS protection, and edge caching, without opening any inbound firewall ports on Oracle Cloud!
+Your hub is now accessible globally at `https://activity.your-domain.com/api/activity` with free SSL, DDoS protection, and edge caching, without opening any inbound firewall ports on Oracle Cloud!
 
 ---
 
@@ -174,7 +174,7 @@ Create `~/.config/what-im-doing.conf` on each machine:
 
 **On Workstation:**
 ```bash
-ENDPOINT="https://activity.isui.ren/api/activity"
+ENDPOINT="https://activity.your-domain.com/api/activity"
 AUTH_TOKEN="your-secret-token"
 DEVICE_ID="workstation"
 DEVICE_NAME="Arch Linux (Workstation)"
@@ -183,7 +183,7 @@ INTERVAL=15
 
 **On Laptop:**
 ```bash
-ENDPOINT="https://activity.isui.ren/api/activity"
+ENDPOINT="https://activity.your-domain.com/api/activity"
 AUTH_TOKEN="your-secret-token"
 DEVICE_ID="laptop"
 DEVICE_NAME="ThinkPad (Laptop)"
@@ -212,7 +212,7 @@ For users migrating from or co-existing with Mix Space / Shiro ecosystems:
   - `media_title` / `media_artist` ➔ mapped to `media.title` / `media.artist`
   - `device` / `device_id` ➔ mapped to `deviceName` / `deviceId`
   - `key` / `api_key` ➔ authenticated against `AUTH_TOKEN` / `ACTIVITY_TOKEN`
-- Existing Mix Space telemetry scripts (such as `processforlinux` or custom hooks) can point directly to `https://activity.isui.ren/fn/ps/update` with no code changes needed.
+- Existing Mix Space telemetry scripts (such as `processforlinux` or custom hooks) can point directly to `https://activity.your-domain.com/fn/ps/update` with no code changes needed.
 
 ---
 
@@ -222,7 +222,7 @@ This plugin strictly enforces Rule 2.4 from `contribute.md`:
 1. **Never eagerly fetch remote data on component mount (`onMount`)**:
    Visiting other blog posts or pages makes **zero** network requests.
 2. **IntersectionObserver Gated**:
-   When visiting `/MangoMesa`, brief status (`?brief=1`) is only queried when the avatar container actually enters the viewport.
+   When visiting targeted pages, brief status (`?brief=1`) is only queried when the avatar container actually enters the viewport.
 3. **Drawer History On-Demand**:
    Detailed history (`?history=1`) is only downloaded when the visitor explicitly clicks or expands the status capsule.
 4. **Visibility Awareness**:

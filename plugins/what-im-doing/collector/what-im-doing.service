@@ -9,7 +9,7 @@ Type=simple
 ExecStart=%h/.local/bin/what-im-doing.sh
 Restart=on-failure
 RestartSec=10
-Environment=ENDPOINT=https://activity.isui.ren/api/activity
+Environment=ENDPOINT=https://activity.example.com/api/activity
 Environment=INTERVAL=15
 # Optional: Set unique device name/id for workstation or laptop
 # Environment=DEVICE_ID=workstation

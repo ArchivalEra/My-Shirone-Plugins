@@ -37,7 +37,7 @@ flowchart TD
         D3["🖧 融合网关 / 路由器<br/>id: gateway-s905<br/>type: server"]
     end
 
-    subgraph CF["Cloudflare 边缘 (统一域名: activity.isui.ren)"]
+    subgraph CF["Cloudflare 边缘 (统一域名: activity.your-domain.com)"]
         Tunnel["Cloudflare Tunnel 入口"]
         Worker["⚡ Cloudflare Worker (约 80~120 行)<br/>- 路由分发 (/report 与 /activity)<br/>- 设备 Token 白名单鉴权<br/>- 边缘 Cache / 内存态管理<br/>- 120s 自动离线超时判定"]
     end
@@ -141,7 +141,7 @@ Worker 对外暴露的 `GET /api/activity` 接口输出：
 ## 4. Cloudflare Worker 实现规范
 
 ### 4.1 核心路由与逻辑要求
-* **Worker 入口**：支持绑定自定义域名（如 `activity.isui.ren`）。
+* **Worker 入口**：支持绑定自定义域名（如 `activity.your-domain.com`）。
 * **接口列表**：
   1. `POST /api/activity/report`：设备上报接口。
      - 校验 HTTP Header：`Authorization: Bearer <device_token>`；
@@ -177,7 +177,7 @@ Worker 对外暴露的 `GET /api/activity` 接口输出：
 * **设备自描述配置 (`/etc/what-im-doing/config.json` 或 `~/.config/what-im-doing.json`)**：
   ```json
   {
-    "endpoint": "https://activity.isui.ren/api/activity/report",
+    "endpoint": "https://activity.example.com/api/activity/report",
     "deviceId": "debian-desktop",
     "deviceName": "Debian 13 开发工作站",
     "deviceType": "desktop",

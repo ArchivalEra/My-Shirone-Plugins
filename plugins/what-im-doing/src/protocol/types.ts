@@ -27,7 +27,7 @@ export interface DeviceActivity {
 	deviceId: string; // e.g. "arch-pc"
 	deviceName: string; // e.g. "Arch Linux (KDE 6.7)"
 	appName: string; // e.g. "Antigravity"
-	windowTitle: string; // e.g. "isui.ren-Blog - Antigravity"
+	windowTitle: string; // e.g. "Workspace - Code Editor"
 	status: ActivityStatus;
 	osInfo: string; // e.g. "Linux / Wayland (Plasma 6.7)"
 	idleSeconds: number;
@@ -83,7 +83,7 @@ export interface ActivityHistoryResponse {
  */
 export interface WhatImDoingOptions {
 	/**
-	 * Backend API endpoint URL (e.g. "/api/activity" or "https://activity.isui.ren/api/activity")
+	 * Backend API endpoint URL (e.g. "/api/activity" or "https://activity.example.com/api/activity")
 	 * Default: "/api/activity"
 	 */
 	endpoint?: string;
@@ -119,7 +119,7 @@ export interface WhatImDoingOptions {
 
 	/**
 	 * Restrict capsule loading to specific URL path prefixes
-	 * Default: ["/MangoMesa"]
+	 * Default: undefined (mounts on all routes matching targetSelector)
 	 */
 	routeFilter?: string[];
 

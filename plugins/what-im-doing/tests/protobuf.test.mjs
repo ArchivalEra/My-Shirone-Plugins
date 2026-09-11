@@ -16,7 +16,7 @@ test("Protobuf - encode and decode DeviceActivity with full UTF-8 and 64-bit tim
 		deviceId: "arch-desktop",
 		deviceName: "Arch Linux (KDE 6.7 Wayland)",
 		appName: "Antigravity",
-		windowTitle: "isui.ren-Blog - [contribute.md] - Antigravity IDE",
+		windowTitle: "Project - [contribute.md] - Editor",
 		status: ActivityStatus.ACTIVE,
 		osInfo: "Linux 6.12-zen / Wayland Plasma 6.7.0",
 		idleSeconds: 42,

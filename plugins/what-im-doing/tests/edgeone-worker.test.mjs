@@ -36,7 +36,7 @@ test("EdgeOne Worker - Ingest Protobuf and query via GET", async () => {
 	};
 	const binary = encodeDeviceActivity(act);
 
-	const postReq = new Request("https://eo.isui.ren/api/activity", {
+	const postReq = new Request("https://activity.example.com/api/activity", {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/x-protobuf",
@@ -49,7 +49,7 @@ test("EdgeOne Worker - Ingest Protobuf and query via GET", async () => {
 	assert.equal(postRes.status, 200);
 
 	// 2. Query JSON
-	const getReq = new Request("https://eo.isui.ren/api/activity", {
+	const getReq = new Request("https://activity.example.com/api/activity", {
 		method: "GET",
 		headers: { Accept: "application/json" },
 	});

@@ -27,6 +27,9 @@ class MockD1Database {
 						app_name: "",
 						window_title: "",
 						idle_seconds: 0,
+						os_info: "",
+						media_title: "",
+						media_artist: "",
 						token,
 						last_seen: lastSeen,
 						updated_at: updatedAt,
@@ -39,6 +42,9 @@ class MockD1Database {
 						appName,
 						windowTitle,
 						idleSeconds,
+						osInfo,
+						mediaTitle,
+						mediaArtist,
 						lastSeen,
 						updatedAt,
 						id,
@@ -49,6 +55,9 @@ class MockD1Database {
 						existing.app_name = appName;
 						existing.window_title = windowTitle;
 						existing.idle_seconds = idleSeconds;
+						existing.os_info = osInfo;
+						existing.media_title = mediaTitle;
+						existing.media_artist = mediaArtist;
 						existing.last_seen = lastSeen;
 						existing.updated_at = updatedAt;
 					}

@@ -17,7 +17,7 @@ message DeviceActivity {
   string device_id = 2;           // Unique device identifier (e.g. "arch-pc", "laptop-kde")
   string device_name = 3;         // Friendly display name (e.g. "Arch Linux (KDE 6.7)")
   string app_name = 4;            // Active application name (e.g. "Antigravity", "Firefox")
-  string window_title = 5;        // Window title bar text (e.g. "isui.ren-Blog - Antigravity")
+  string window_title = 5;        // Window title bar text (e.g. "Workspace - Code Editor")
   ActivityStatus status = 6;      // Active/Idle/Away status
   string os_info = 7;             // OS & desktop env details (e.g. "Linux / Wayland (Plasma 6.7)")
   int64 idle_seconds = 8;         // Seconds of user inactivity

@@ -1,5 +1,5 @@
 {
-  "endpoint": "https://activity.isui.ren/api/activity/report",
+  "endpoint": "https://activity.example.com/api/activity/report",
   "deviceId": "debian-desktop",
   "deviceName": "Debian 13 开发工作站",
   "deviceType": "desktop",

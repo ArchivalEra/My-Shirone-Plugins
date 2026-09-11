@@ -7,7 +7,7 @@ credentials-file: /etc/cloudflared/<YOUR-TUNNEL-UUID>.json
 
 ingress:
   # Map public subdomain to local VPS hub daemon
-  - hostname: activity.isui.ren
+  - hostname: activity.your-domain.com
     service: http://127.0.0.1:8080
     originRequest:
       connectTimeout: 5s

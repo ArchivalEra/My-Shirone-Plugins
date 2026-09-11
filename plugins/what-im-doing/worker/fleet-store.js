@@ -129,6 +129,16 @@ export class FleetStore {
 		);
 		const windowTitle = String(payload.windowTitle || "").slice(0, 256);
 		const idleSeconds = Number(payload.idleSeconds) || 0;
+		const osInfo = String(payload.osInfo || "").slice(0, 128);
+		const mediaTitle = String(
+			payload.mediaTitle || payload.media_title || payload.media?.title || "",
+		).slice(0, 256);
+		const mediaArtist = String(
+			payload.mediaArtist ||
+				payload.media_artist ||
+				payload.media?.artist ||
+				"",
+		).slice(0, 128);
 		const reportTimestamp = Number(payload.timestamp) || Date.now();
 		const now = Date.now();
 
@@ -140,6 +150,9 @@ export class FleetStore {
           app_name = ?,
           window_title = ?,
           idle_seconds = ?,
+          os_info = ?,
+          media_title = ?,
+          media_artist = ?,
           last_seen = ?,
           updated_at = ?
         WHERE id = ?
@@ -149,6 +162,9 @@ export class FleetStore {
 				appName,
 				windowTitle,
 				idleSeconds,
+				osInfo,
+				mediaTitle,
+				mediaArtist,
 				reportTimestamp,
 				now,
 				deviceId,
@@ -165,7 +181,7 @@ export class FleetStore {
 		const now = Date.now();
 		const { results } = await this.db
 			.prepare(
-				"SELECT id, name, type, status, app_name, window_title, idle_seconds, last_seen FROM devices",
+				"SELECT id, name, type, status, app_name, window_title, idle_seconds, os_info, media_title, media_artist, last_seen FROM devices",
 			)
 			.all();
 
@@ -174,6 +190,7 @@ export class FleetStore {
 		// Dynamically calculate offline status without modifying D1 table
 		const processedDevices = allDevices.map((dev) => {
 			const isOffline = now - dev.last_seen > 120_000;
+			const hasMedia = Boolean(dev.media_title);
 			return {
 				id: dev.id,
 				deviceId: dev.id,
@@ -184,6 +201,18 @@ export class FleetStore {
 				appName: dev.app_name || "",
 				windowTitle: dev.window_title || "",
 				idleSeconds: dev.idle_seconds || 0,
+				osInfo: dev.os_info || "",
+				media: hasMedia
+					? {
+							title: dev.media_title,
+							artist: dev.media_artist || "",
+							isPlaying: true,
+						}
+					: undefined,
+				mediaTitle: dev.media_title || "",
+				mediaArtist: dev.media_artist || "",
+				media_title: dev.media_title || "",
+				media_artist: dev.media_artist || "",
 				lastSeen: dev.last_seen,
 				timestamp: dev.last_seen,
 				offline: isOffline,
@@ -191,9 +220,11 @@ export class FleetStore {
 		});
 
 		// Multi-Device Arbitration:
-		// Active devices (status 1) with lowest idleSeconds take precedence;
-		// Prefer desktop > laptop > server;
-		// If all offline, choose the most recently active device.
+		// 1. Online devices always beat offline devices;
+		// 2. An actively used device (status == 1 && idle < 180s) strictly beats an idle/away device regardless of form-factor;
+		// 3. Among devices with same activity level, prefer desktop > laptop > server > mobile > other;
+		// 4. Lowest idleSeconds wins;
+		// 5. If all offline, choose the most recently seen device.
 		const typePriority = {
 			desktop: 3,
 			laptop: 2,
@@ -205,10 +236,19 @@ export class FleetStore {
 			if (!a.offline && b.offline) return -1;
 			if (a.offline && !b.offline) return 1;
 			if (!a.offline && !b.offline) {
+				const aActive = a.status === 1 && (a.idleSeconds || 0) < 180;
+				const bActive = b.status === 1 && (b.idleSeconds || 0) < 180;
+				if (aActive && !bActive) return -1;
+				if (!aActive && bActive) return 1;
+
 				const priDiff =
 					(typePriority[b.type] || 0) - (typePriority[a.type] || 0);
 				if (priDiff !== 0) return priDiff;
-				return (a.idleSeconds || 0) - (b.idleSeconds || 0);
+
+				const idleDiff = (a.idleSeconds || 0) - (b.idleSeconds || 0);
+				if (idleDiff !== 0) return idleDiff;
+
+				return (b.lastSeen || 0) - (a.lastSeen || 0);
 			}
 			return b.lastSeen - a.lastSeen;
 		});

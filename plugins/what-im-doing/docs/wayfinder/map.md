@@ -10,7 +10,7 @@
 - **视口懒加载契约（On-Intent / Viewport Contract）**：前端请求严禁在 `onMount` 中饥渴触发，必须通过 `IntersectionObserver` 仅在头像区域进入视口时才发起单次拉取。
 - **参考规范**：
   - 架构白皮书：[SERVERLESS_FLEET_DEPLOYMENT_SPEC.md](file:///mnt/hdd/zcode-on-the-move/My-Shirone-Plugins/plugins/what-im-doing/docs/SERVERLESS_FLEET_DEPLOYMENT_SPEC.md)
-  - 质量守则：[contribute/SKILL.md](file:///mnt/hdd/zcode-on-the-move/isui.ren-Blog/.agents/skills/contribute/SKILL.md)
+  - 质量守则：`contribute/SKILL.md` (Upstream Contribution Protocol)
 
 ## Decisions so far
 

@@ -7,7 +7,7 @@
 set -euo pipefail
 
 # 1. Defaults
-ENDPOINT="${ENDPOINT:-https://activity.isui.ren/api/activity/report}"
+ENDPOINT="${ENDPOINT:-https://activity.example.com/api/activity/report}"
 AUTH_TOKEN="${AUTH_TOKEN:-${API_KEY:-}}"
 DEVICE_ID="${DEVICE_ID:-$(hostname | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')}"
 DEVICE_NAME="${DEVICE_NAME:-$(hostname) (Linux)}"
@@ -147,6 +147,22 @@ get_os_info() {
     echo "${os} / Wayland (KDE 6)"
 }
 
+get_media_info() {
+    local media_title=""
+    local media_artist=""
+
+    if command -v playerctl &>/dev/null; then
+        local p_status
+        p_status=$(playerctl status 2>/dev/null || true)
+        if [[ "$p_status" == "Playing" ]]; then
+            media_title=$(playerctl metadata title 2>/dev/null || true)
+            media_artist=$(playerctl metadata artist 2>/dev/null || true)
+        fi
+    fi
+
+    echo "${media_title}:::${media_artist}"
+}
+
 send_activity() {
     local raw_info
     raw_info=$(get_active_app_and_title)
@@ -163,13 +179,18 @@ send_activity() {
         status=2 # IDLE
     fi
 
+    local media_info
+    media_info=$(get_media_info)
+    local media_title="${media_info%%:::*}"
+    local media_artist="${media_info##*:::}"
+
     local now_sec
     now_sec=$(date +%s)
     local now_ms
     now_ms=$(( now_sec * 1000 ))
 
     # 3. State Diffing & Heartbeat Suppression
-    local current_state_key="${app}:::${title}:::${status}"
+    local current_state_key="${app}:::${title}:::${status}:::${media_title}"
     local last_state_key=""
     local last_sent_sec=0
 
@@ -198,6 +219,10 @@ send_activity() {
     safe_app=$(printf '%s' "$app" | sed 's/\\/\\\\/g; s/"/\\"/g')
     local safe_name
     safe_name=$(printf '%s' "$DEVICE_NAME" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    local safe_media_title
+    safe_media_title=$(printf '%s' "$media_title" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/ /g')
+    local safe_media_artist
+    safe_media_artist=$(printf '%s' "$media_artist" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/ /g')
     local os_info
     os_info=$(get_os_info)
 
@@ -212,6 +237,8 @@ send_activity() {
   "windowTitle": "${safe_title}",
   "idleSeconds": ${idle},
   "osInfo": "${os_info}",
+  "mediaTitle": "${safe_media_title}",
+  "mediaArtist": "${safe_media_artist}",
   "timestamp": ${now_ms}
 }
 JSON_EOF

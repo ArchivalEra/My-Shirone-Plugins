@@ -7,6 +7,9 @@ CREATE TABLE IF NOT EXISTS devices (
   app_name TEXT NOT NULL DEFAULT '',
   window_title TEXT NOT NULL DEFAULT '',
   idle_seconds INTEGER NOT NULL DEFAULT 0,
+  os_info TEXT NOT NULL DEFAULT '',
+  media_title TEXT NOT NULL DEFAULT '',
+  media_artist TEXT NOT NULL DEFAULT '',
   token TEXT NOT NULL,
   last_seen INTEGER NOT NULL,
   updated_at INTEGER NOT NULL

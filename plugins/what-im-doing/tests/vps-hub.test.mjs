@@ -70,7 +70,7 @@ describe("Oracle VPS Activity Hub (vps-hub.mjs)", () => {
 			deviceId: "workstation-pc",
 			deviceName: "Workstation (KDE 6.7)",
 			appName: "Antigravity",
-			windowTitle: "isui.ren-Blog - Antigravity",
+			windowTitle: "Workspace - Code Editor",
 			status: 1, // ACTIVE
 			osInfo: "Arch Linux / Wayland",
 			idleSeconds: 5,
