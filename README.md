@@ -13,6 +13,9 @@ All plugins in this repository are designed strictly adhering to Shirone's core 
 
 | Plugin | Status | Description |
 |---|---|---|
+| [`what-im-doing`](./plugins/what-im-doing) | Active | Serverless edge fleet telemetry aggregator & Material 3 multi-device activity capsule / drawer. |
+| [`strip-first-h1`](./plugins/strip-first-h1) | Active | Compile-time AST optimizer to eliminate redundant first `<h1>` headings, fixing double title syndrome & TOC pollution. |
+| [`pretext-masonry`](./plugins/pretext-masonry) | Active | Zero-reflow pure arithmetic waterfall layout powered by `@chenglou/pretext`, eliminating forced layout thrashing. |
 | [`mixed-feed`](./plugins/mixed-feed) | Active | Unified timeline feed combining long-form blog posts and lightweight micro-moments on the homepage. |
 
 ---

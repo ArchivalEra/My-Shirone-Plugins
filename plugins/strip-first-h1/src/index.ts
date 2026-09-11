@@ -15,6 +15,35 @@ export interface StripFirstH1Options {
 	matchTitleOnly?: boolean;
 }
 
+interface MdastNode {
+	type?: string;
+	depth?: number;
+	value?: string;
+	children?: MdastNode[];
+}
+
+interface MdastTree {
+	children?: MdastNode[];
+}
+
+interface VFileContext {
+	data?: {
+		astro?: {
+			frontmatter?: Record<string, unknown>;
+		};
+		frontmatter?: Record<string, unknown>;
+	};
+}
+
+export interface AstroIntegrationLike {
+	name: string;
+	hooks: {
+		"astro:config:setup"?: (params: {
+			updateConfig: (config: Record<string, unknown>) => void;
+		}) => void;
+	};
+}
+
 /**
  * Extracts plain text from an mdast node recursively without external dependencies.
  */
@@ -36,7 +65,7 @@ function extractNodeText(node: unknown): string {
  * Zero external dependencies, 0ms overhead, 0 bytes on client.
  */
 export function remarkStripFirstH1(options: StripFirstH1Options = {}) {
-	return (tree: any, file?: any): void => {
+	return (tree: MdastTree, file?: VFileContext): void => {
 		if (!tree || !Array.isArray(tree.children)) return;
 
 		for (let i = 0; i < tree.children.length; i++) {
@@ -53,7 +82,8 @@ export function remarkStripFirstH1(options: StripFirstH1Options = {}) {
 						if (
 							frontmatterTitle &&
 							typeof frontmatterTitle === "string" &&
-							frontmatterTitle.trim().toLowerCase() === headingText.toLowerCase()
+							frontmatterTitle.trim().toLowerCase() ===
+								headingText.toLowerCase()
 						) {
 							tree.children.splice(i, 1);
 						}
@@ -72,11 +102,17 @@ export function remarkStripFirstH1(options: StripFirstH1Options = {}) {
 /**
  * Astro Integration wrapper for plug-and-play usage in astro.config.mjs.
  */
-export function stripFirstH1(options: StripFirstH1Options = {}): any {
+export function stripFirstH1(
+	options: StripFirstH1Options = {},
+): AstroIntegrationLike {
 	return {
 		name: "@shirone-plugins/strip-first-h1",
 		hooks: {
-			"astro:config:setup": ({ updateConfig }: { updateConfig: (c: any) => void }) => {
+			"astro:config:setup": ({
+				updateConfig,
+			}: {
+				updateConfig: (config: Record<string, unknown>) => void;
+			}) => {
 				updateConfig({
 					markdown: {
 						remarkPlugins: [[remarkStripFirstH1, options]],
