@@ -6,7 +6,7 @@ compatibility_date = "2024-09-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "what-im-doing-fleet"
-database_id = "YOUR_D1_DATABASE_ID_HERE"
+database_id = "39004996-6aa8-47dd-a013-e1d6b477520d"
 
 # Optional Standalone Security:
 # If not using Cloudflare Zero Trust Access for /admin, set a secret via:
