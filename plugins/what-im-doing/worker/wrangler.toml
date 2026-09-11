@@ -1,6 +1,12 @@
 name = "what-im-doing-hub"
 main = "worker.js"
 compatibility_date = "2024-09-01"
+workers_dev = true
+
+# Custom Domain Route
+[[routes]]
+pattern = "api.mango-mesa.ccwu.cc"
+custom_domain = true
 
 # Cloudflare D1 Database Binding
 [[d1_databases]]
