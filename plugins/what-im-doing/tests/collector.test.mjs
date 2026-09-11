@@ -9,7 +9,9 @@ import {
 test("Collector - getOsInfo returns valid desktop and session info", () => {
 	const info = getOsInfo();
 	assert.ok(typeof info === "string");
-	assert.ok(info.includes("Linux") || info.includes("wayland") || info.includes("KDE"));
+	assert.ok(
+		info.includes("Linux") || info.includes("wayland") || info.includes("KDE"),
+	);
 });
 
 test("Collector - getIdleSeconds returns a non-negative integer", () => {

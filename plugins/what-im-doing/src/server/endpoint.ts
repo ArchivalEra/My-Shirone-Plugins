@@ -3,7 +3,7 @@ import {
 	decodeDeviceActivity,
 	encodeHistoryResponse,
 } from "../protocol/protobuf.js";
-import type { ActivityHistoryResponse, DeviceActivity } from "../protocol/types.js";
+import type { DeviceActivity } from "../protocol/types.js";
 import { defaultStore } from "./storage.js";
 
 export interface EndpointConfig {
@@ -34,10 +34,15 @@ export function createActivityEndpoint(config: EndpointConfig = {}) {
 		async GET(request: Request) {
 			const accept = request.headers.get("accept") ?? "";
 			const url = new URL(request.url);
-			const isBrief = url.searchParams.get("brief") === "1" || url.searchParams.get("brief") === "true";
-			const responseData = isBrief ? defaultStore.getBriefResponse() : defaultStore.getResponse(maxDisplay);
+			const isBrief =
+				url.searchParams.get("brief") === "1" ||
+				url.searchParams.get("brief") === "true";
+			const responseData = isBrief
+				? defaultStore.getBriefResponse()
+				: defaultStore.getResponse(maxDisplay);
 
-			const cacheHeader = "public, max-age=10, s-maxage=15, stale-while-revalidate=30";
+			const cacheHeader =
+				"public, max-age=10, s-maxage=15, stale-while-revalidate=30";
 
 			// Return Protobuf binary if requested
 			if (accept.includes("application/x-protobuf")) {
@@ -84,7 +89,9 @@ export function createActivityEndpoint(config: EndpointConfig = {}) {
 				// Check auth token if configured (supports Bearer token, ?key=, or body.api_key / body.key)
 				if (config.authToken) {
 					const expectedBearer = `Bearer ${config.authToken}`;
-					const bodyKey = body ? (body.api_key as string) || (body.key as string) : undefined;
+					const bodyKey = body
+						? (body.api_key as string) || (body.key as string)
+						: undefined;
 					const isAuthorized =
 						authHeader === expectedBearer ||
 						queryKey === config.authToken ||
@@ -108,7 +115,10 @@ export function createActivityEndpoint(config: EndpointConfig = {}) {
 								JSON.stringify({ success: true, count: batch.events.length }),
 								{
 									status: 200,
-									headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+									headers: {
+										...CORS_HEADERS,
+										"Content-Type": "application/json",
+									},
 								},
 							);
 						}
@@ -119,7 +129,10 @@ export function createActivityEndpoint(config: EndpointConfig = {}) {
 							defaultStore.record(single);
 							return new Response(JSON.stringify({ success: true, count: 1 }), {
 								status: 200,
-								headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+								headers: {
+									...CORS_HEADERS,
+									"Content-Type": "application/json",
+								},
 							});
 						}
 					}
@@ -131,7 +144,10 @@ export function createActivityEndpoint(config: EndpointConfig = {}) {
 							JSON.stringify({ success: true, count: body.events.length }),
 							{
 								status: 200,
-								headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+								headers: {
+									...CORS_HEADERS,
+									"Content-Type": "application/json",
+								},
 							},
 						);
 					}
@@ -153,10 +169,13 @@ export function createActivityEndpoint(config: EndpointConfig = {}) {
 					}
 				}
 
-				return new Response(JSON.stringify({ error: "Invalid payload format" }), {
-					status: 400,
-					headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-				});
+				return new Response(
+					JSON.stringify({ error: "Invalid payload format" }),
+					{
+						status: 400,
+						headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+					},
+				);
 			} catch (err: unknown) {
 				const message = err instanceof Error ? err.message : String(err);
 				return new Response(JSON.stringify({ error: message }), {

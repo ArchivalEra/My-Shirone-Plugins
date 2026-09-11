@@ -1,7 +1,9 @@
 {
-  "endpoint": "https://isui.ren/api/activity",
-  "token": "your-secret-token-here",
-  "deviceId": "arch-desktop",
-  "deviceName": "Arch Linux (KDE 6.7)",
-  "intervalSeconds": 15
+  "endpoint": "https://activity.isui.ren/api/activity/report",
+  "deviceId": "debian-desktop",
+  "deviceName": "Debian 13 开发工作站",
+  "deviceType": "desktop",
+  "token": "sk_dev_ae7f9c21a4",
+  "cfAccessClientId": "",
+  "cfAccessClientSecret": ""
 }

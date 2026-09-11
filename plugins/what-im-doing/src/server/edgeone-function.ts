@@ -11,13 +11,23 @@ import {
 	decodeDeviceActivity,
 	encodeHistoryResponse,
 } from "../protocol/protobuf.js";
-import type { ActivityHistoryResponse, DeviceActivity } from "../protocol/types.js";
+import type {
+	ActivityHistoryResponse,
+	DeviceActivity,
+} from "../protocol/types.js";
 
 interface Env {
 	ACTIVITY_KV?: {
 		get(key: string, type?: "json" | "text" | "arrayBuffer"): Promise<unknown>;
-		put(key: string, value: string | ArrayBuffer, options?: { expirationTtl?: number }): Promise<void>;
-		list(options?: { prefix?: string; limit?: number }): Promise<{ keys: Array<{ name: string }> }>;
+		put(
+			key: string,
+			value: string | ArrayBuffer,
+			options?: { expirationTtl?: number },
+		): Promise<void>;
+		list(options?: {
+			prefix?: string;
+			limit?: number;
+		}): Promise<{ keys: Array<{ name: string }> }>;
 	};
 	AUTH_TOKEN?: string;
 }
@@ -46,7 +56,10 @@ export default {
 				if (Array.isArray(raw)) {
 					history = raw as DeviceActivity[];
 				}
-				const rawDevices = await env.ACTIVITY_KV.get("activity:devices", "json");
+				const rawDevices = await env.ACTIVITY_KV.get(
+					"activity:devices",
+					"json",
+				);
 				if (rawDevices && typeof rawDevices === "object") {
 					devices = Object.values(rawDevices as Record<string, DeviceActivity>);
 				}
@@ -109,7 +122,10 @@ export default {
 					if (single.deviceId) newEvents.push(single);
 				}
 			} else {
-				const body = (await request.json()) as { events?: DeviceActivity[]; deviceId?: string };
+				const body = (await request.json()) as {
+					events?: DeviceActivity[];
+					deviceId?: string;
+				};
 				if (Array.isArray(body.events)) {
 					newEvents.push(...body.events);
 				} else if (body.deviceId) {
@@ -126,8 +142,16 @@ export default {
 
 			if (env.ACTIVITY_KV) {
 				// Read current KV state
-				let history = ((await env.ACTIVITY_KV.get("activity:history", "json")) as DeviceActivity[]) || [];
-				const devices = ((await env.ACTIVITY_KV.get("activity:devices", "json")) as Record<string, DeviceActivity>) || {};
+				let history =
+					((await env.ACTIVITY_KV.get(
+						"activity:history",
+						"json",
+					)) as DeviceActivity[]) || [];
+				const devices =
+					((await env.ACTIVITY_KV.get("activity:devices", "json")) as Record<
+						string,
+						DeviceActivity
+					>) || {};
 
 				for (const ev of newEvents) {
 					if (!ev.timestamp) ev.timestamp = Date.now();
@@ -144,12 +168,18 @@ export default {
 				await env.ACTIVITY_KV.put("activity:devices", JSON.stringify(devices));
 			}
 
-			return new Response(JSON.stringify({ success: true, count: newEvents.length }), {
-				status: 200,
-				headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-			});
+			return new Response(
+				JSON.stringify({ success: true, count: newEvents.length }),
+				{
+					status: 200,
+					headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+				},
+			);
 		}
 
-		return new Response("Method not allowed", { status: 405, headers: CORS_HEADERS });
+		return new Response("Method not allowed", {
+			status: 405,
+			headers: CORS_HEADERS,
+		});
 	},
 };

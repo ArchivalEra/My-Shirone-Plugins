@@ -136,10 +136,11 @@ export class ProtoReader {
 			case 1:
 				this.pos += 8;
 				break;
-			case 2:
+			case 2: {
 				const len = Number(this.readVarint());
 				this.pos += len;
 				break;
+			}
 			case 5:
 				this.pos += 4;
 				break;
@@ -250,7 +251,9 @@ export function decodeDeviceActivity(bytes: Uint8Array): DeviceActivity {
 /**
  * Encodes ActivityBatchUploadRequest
  */
-export function encodeBatchUploadRequest(req: ActivityBatchUploadRequest): Uint8Array {
+export function encodeBatchUploadRequest(
+	req: ActivityBatchUploadRequest,
+): Uint8Array {
 	const writer = new ProtoWriter();
 	writer.writeString(1, req.token);
 
@@ -264,7 +267,9 @@ export function encodeBatchUploadRequest(req: ActivityBatchUploadRequest): Uint8
 /**
  * Decodes ActivityBatchUploadRequest
  */
-export function decodeBatchUploadRequest(bytes: Uint8Array): ActivityBatchUploadRequest {
+export function decodeBatchUploadRequest(
+	bytes: Uint8Array,
+): ActivityBatchUploadRequest {
 	const reader = new ProtoReader(bytes);
 	const req: ActivityBatchUploadRequest = {
 		token: "",
@@ -295,7 +300,9 @@ export function decodeBatchUploadRequest(bytes: Uint8Array): ActivityBatchUpload
 /**
  * Encodes ActivityHistoryResponse
  */
-export function encodeHistoryResponse(res: ActivityHistoryResponse): Uint8Array {
+export function encodeHistoryResponse(
+	res: ActivityHistoryResponse,
+): Uint8Array {
 	const writer = new ProtoWriter();
 
 	if (res.current) {
@@ -306,7 +313,7 @@ export function encodeHistoryResponse(res: ActivityHistoryResponse): Uint8Array 
 		writer.writeMessage(2, encodeDeviceActivity(dev));
 	}
 
-	for (const h of res.history) {
+	for (const h of res.history ?? []) {
 		writer.writeMessage(3, encodeDeviceActivity(h));
 	}
 
@@ -318,14 +325,14 @@ export function encodeHistoryResponse(res: ActivityHistoryResponse): Uint8Array 
 /**
  * Decodes ActivityHistoryResponse
  */
-export function decodeHistoryResponse(bytes: Uint8Array): ActivityHistoryResponse {
+export function decodeHistoryResponse(
+	bytes: Uint8Array,
+): ActivityHistoryResponse {
 	const reader = new ProtoReader(bytes);
-	const res: ActivityHistoryResponse = {
-		current: null,
-		devices: [],
-		history: [],
-		serverTime: Date.now(),
-	};
+	let current: DeviceActivity | null = null;
+	const devices: DeviceActivity[] = [];
+	const history: DeviceActivity[] = [];
+	let serverTime = Date.now();
 
 	while (reader.hasMore) {
 		const tag = reader.readTag();
@@ -334,26 +341,31 @@ export function decodeHistoryResponse(bytes: Uint8Array): ActivityHistoryRespons
 		switch (tag.fieldNo) {
 			case 1: {
 				const curBytes = reader.readBytes();
-				res.current = decodeDeviceActivity(curBytes);
+				current = decodeDeviceActivity(curBytes);
 				break;
 			}
 			case 2: {
 				const devBytes = reader.readBytes();
-				res.devices.push(decodeDeviceActivity(devBytes));
+				devices.push(decodeDeviceActivity(devBytes));
 				break;
 			}
 			case 3: {
 				const hBytes = reader.readBytes();
-				res.history.push(decodeDeviceActivity(hBytes));
+				history.push(decodeDeviceActivity(hBytes));
 				break;
 			}
 			case 4:
-				res.serverTime = Number(reader.readVarint());
+				serverTime = Number(reader.readVarint());
 				break;
 			default:
 				reader.skip(tag.wireType);
 		}
 	}
 
-	return res;
+	return {
+		current,
+		devices,
+		history,
+		serverTime,
+	};
 }

@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PROTOTYPE - What-Im-Doing Edge Fleet Provisioning</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #38bdf8;
+      --primary-hover: #0284c7;
+      --success: #4ade80;
+      --danger: #f87171;
+      --code-bg: #0b1120;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Noto Sans", sans-serif;
+      line-height: 1.5;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+    .badge-prototype {
+      background: #f59e0b;
+      color: #000;
+      font-weight: 700;
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      display: inline-block;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 24px;
+      max-width: 680px;
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 6px; }
+    p.subtitle { color: var(--text-muted); font-size: 0.875rem; }
+    .container {
+      width: 100%;
+      max-width: 760px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    }
+    .card h2 {
+      font-size: 1.1rem;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .form-group {
+      margin-bottom: 14px;
+    }
+    label {
+      display: block;
+      font-size: 0.825rem;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+    input, select {
+      width: 100%;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus {
+      border-color: var(--primary);
+    }
+    .btn {
+      background: var(--primary);
+      color: #000;
+      font-weight: 600;
+      font-size: 0.875rem;
+      padding: 10px 18px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .btn:hover { background: var(--primary-hover); color: #fff; }
+    .btn-danger {
+      background: transparent;
+      color: var(--danger);
+      border: 1px solid var(--danger);
+      padding: 4px 10px;
+      font-size: 0.75rem;
+      border-radius: 4px;
+    }
+    .btn-danger:hover { background: var(--danger); color: #000; }
+    .btn-copy {
+      background: #334155;
+      color: #f8fafc;
+      font-size: 0.75rem;
+      padding: 4px 8px;
+      border-radius: 4px;
+      float: right;
+    }
+    .btn-copy:hover { background: var(--primary); color: #000; }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.8rem;
+      overflow-x: auto;
+      color: #38bdf8;
+      margin-top: 8px;
+      position: relative;
+    }
+    .device-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+    .device-info { display: flex; flex-direction: column; gap: 2px; }
+    .device-title { font-weight: 600; font-size: 0.9rem; }
+    .device-meta { font-size: 0.75rem; color: var(--text-muted); font-family: monospace; }
+    .tag {
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #1e293b;
+      border: 1px solid var(--border);
+      margin-left: 6px;
+    }
+    #pinGate { text-align: center; padding: 40px 20px; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="badge-prototype">Throwaway Prototype</div>
+    <h1>Edge Fleet Provisioning & Admin</h1>
+    <p class="subtitle">What-Im-Doing v2.0.0 · Embedded Single-File Worker UI Mock</p>
+  </header>
+
+  <div class="container">
+
+    <!-- 1. PIN Authentication Gate -->
+    <div class="card" id="pinGate">
+      <h2>🔐 Admin Verification</h2>
+      <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 16px;">
+        This page will be embedded at <code>GET /admin</code> in the EdgeOne Worker.<br/>
+        Enter the system Admin PIN (Prototype default: <code>123456</code>)
+      </p>
+      <div style="max-width: 240px; margin: 0 auto;">
+        <input type="password" id="pinInput" placeholder="Enter PIN" value="123456" style="text-align: center; font-size: 1.1rem; letter-spacing: 2px; margin-bottom: 12px;" />
+        <button class="btn" style="width: 100%;" onclick="verifyPin()">Unlock Fleet Manager</button>
+      </div>
+    </div>
+
+    <!-- 2. Main Admin Dashboard (Hidden initially) -->
+    <div id="mainDashboard" style="display: none; display: flex; flex-direction: column; gap: 20px;">
+
+      <!-- Card: Register New Device -->
+      <div class="card">
+        <h2>➕ Register New Device</h2>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="form-group">
+            <label>Device ID (Slug format: a-z0-9_-)</label>
+            <input type="text" id="devId" placeholder="e.g. debian-desktop" value="debian-desktop" />
+          </div>
+          <div class="form-group">
+            <label>Device Name (Human readable)</label>
+            <input type="text" id="devName" placeholder="e.g. Debian 13 开发工作站" value="Debian 13 开发工作站" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Device Type</label>
+          <select id="devType">
+            <option value="desktop">🖥️ Desktop (台式主机)</option>
+            <option value="laptop">💻 Laptop (便携笔记本)</option>
+            <option value="server">🖧 Server / Gateway (服务器 / 网关)</option>
+            <option value="mobile">📱 Mobile (移动终端)</option>
+            <option value="other">📦 Other</option>
+          </select>
+        </div>
+
+        <button class="btn" onclick="registerDevice()">Generate Device Token & Enroll</button>
+
+        <!-- Result Box -->
+        <div id="provisionResult" style="margin-top: 16px; display: none;">
+          <label>Client Configuration File (Save to <code>~/.config/what-im-doing.json</code>):</label>
+          <button class="btn-copy" onclick="copyConfig()">Copy Config</button>
+          <pre id="configCode"></pre>
+        </div>
+      </div>
+
+      <!-- Card: Enrolled Fleet (KV Store State) -->
+      <div class="card">
+        <h2>📋 Enrolled Fleet in Edge KV (<span id="fleetCount">0</span>)</h2>
+        <div id="deviceList">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+
+      <!-- Card: Live Raw Snapshot Output (What /api/activity returns) -->
+      <div class="card">
+        <h2>🌐 Live <code>GET /api/activity</code> Raw Snapshot Output</h2>
+        <p style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 8px;">
+          Exact JSON served to Astro / Svelte blog or external widgets with 120s offline auto-calculation.
+        </p>
+        <button class="btn-copy" onclick="refreshSnapshot()">Refresh Snapshot</button>
+        <pre id="snapshotOutput"></pre>
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    // In-memory mock of Edge KV
+    const mockKv = new Map();
+
+    // Seed mock data
+    mockKv.set("device:debian-desktop", {
+      id: "debian-desktop",
+      name: "Debian 13 开发工作站",
+      type: "desktop",
+      status: 1,
+      appName: "Antigravity",
+      windowTitle: "Shirone 主题配置梳理任务",
+      idleSeconds: 0,
+      token: "sk_dev_ae7f9c21a4",
+      lastSeen: Date.now() - 15000 // 15s ago (active)
+    });
+
+    mockKv.set("device:thinkpad-x1", {
+      id: "thinkpad-x1",
+      name: "ThinkPad 便携本",
+      type: "laptop",
+      status: 1,
+      appName: "Zen Browser",
+      windowTitle: "GitHub - Pull Requests",
+      idleSeconds: 300,
+      token: "sk_dev_bb8d01ef55",
+      lastSeen: Date.now() - 360000 // 6 minutes ago (>120s => offline!)
+    });
+
+    function verifyPin() {
+      const pin = document.getElementById("pinInput").value;
+      if (pin === "123456") {
+        document.getElementById("pinGate").style.display = "none";
+        document.getElementById("mainDashboard").style.display = "flex";
+        renderFleet();
+        refreshSnapshot();
+      } else {
+        alert("Incorrect PIN! (Default: 123456)");
+      }
+    }
+
+    function generateToken() {
+      const chars = "abcdef0123456789";
+      let res = "sk_dev_";
+      for (let i = 0; i < 16; i++) {
+        res += chars[Math.floor(Math.random() * chars.length)];
+      }
+      return res;
+    }
+
+    function registerDevice() {
+      const id = document.getElementById("devId").value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
+      const name = document.getElementById("devName").value.trim();
+      const type = document.getElementById("devType").value;
+
+      if (!id || !name) {
+        alert("Please provide both Device ID and Name");
+        return;
+      }
+
+      const token = generateToken();
+      const deviceRecord = {
+        id,
+        name,
+        type,
+        status: 4, // Starts as offline until first report
+        appName: "",
+        windowTitle: "",
+        idleSeconds: 0,
+        token,
+        lastSeen: Date.now()
+      };
+
+      // Save to KV mock
+      mockKv.set(`device:${id}`, deviceRecord);
+
+      // Show config
+      const clientConfig = {
+        endpoint: "https://activity.isui.ren/api/activity/report",
+        deviceId: id,
+        deviceName: name,
+        deviceType: type,
+        token: token
+      };
+
+      document.getElementById("configCode").innerText = JSON.stringify(clientConfig, null, 2);
+      document.getElementById("provisionResult").style.display = "block";
+
+      renderFleet();
+      refreshSnapshot();
+    }
+
+    function deleteDevice(id) {
+      if (confirm(`Revoke and delete device '${id}'?`)) {
+        mockKv.delete(`device:${id}`);
+        renderFleet();
+        refreshSnapshot();
+      }
+    }
+
+    function renderFleet() {
+      const listEl = document.getElementById("deviceList");
+      listEl.innerHTML = "";
+      document.getElementById("fleetCount").innerText = mockKv.size;
+
+      if (mockKv.size === 0) {
+        listEl.innerHTML = "<p style='color: var(--text-muted); font-size: 0.85rem;'>No devices enrolled yet.</p>";
+        return;
+      }
+
+      const now = Date.now();
+      for (const [key, dev] of mockKv.entries()) {
+        const isOffline = (now - dev.lastSeen) > 120000;
+        const div = document.createElement("div");
+        div.className = "device-row";
+        div.innerHTML = `
+          <div class="device-info">
+            <div class="device-title">
+              ${isOffline ? "⚪" : "🟢"} ${dev.name}
+              <span class="tag">${dev.type}</span>
+              <span class="tag" style="color: ${isOffline ? 'var(--text-muted)' : 'var(--success)'};">${isOffline ? 'OFFLINE' : 'ACTIVE'}</span>
+            </div>
+            <div class="device-meta">
+              Key: ${key} | Token: ${dev.token.slice(0, 10)}... | Last seen: ${new Date(dev.lastSeen).toLocaleTimeString()}
+            </div>
+          </div>
+          <button class="btn-danger" onclick="deleteDevice('${dev.id}')">Revoke</button>
+        `;
+        listEl.appendChild(div);
+      }
+    }
+
+    function refreshSnapshot() {
+      const now = Date.now();
+      const devices = [];
+
+      for (const dev of mockKv.values()) {
+        const isOffline = (now - dev.lastSeen) > 120000;
+        devices.push({
+          id: dev.id,
+          name: dev.name,
+          type: dev.type,
+          status: isOffline ? 4 : dev.status,
+          appName: dev.appName || "None",
+          windowTitle: dev.windowTitle || "None",
+          lastSeen: dev.lastSeen,
+          offline: isOffline
+        });
+      }
+
+      const snapshot = {
+        devices,
+        serverTime: now
+      };
+
+      document.getElementById("snapshotOutput").innerText = JSON.stringify(snapshot, null, 2);
+    }
+
+    function copyConfig() {
+      const text = document.getElementById("configCode").innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        alert("Configuration copied to clipboard!");
+      });
+    }
+
+    // Auto run on load
+    verifyPin();
+  </script>
+</body>
+</html>

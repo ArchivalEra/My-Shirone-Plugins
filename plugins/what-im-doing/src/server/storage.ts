@@ -1,4 +1,7 @@
-import type { ActivityHistoryResponse, DeviceActivity } from "../protocol/types.js";
+import type {
+	ActivityHistoryResponse,
+	DeviceActivity,
+} from "../protocol/types.js";
 
 /**
  * In-memory / dev server activity store with configurable history capacity
@@ -19,7 +22,10 @@ export class ActivityStore {
 			activity.deviceId || activity.device_id || activity.device || "default";
 		const deviceName = activity.deviceName || activity.device || deviceId;
 		const appName =
-			activity.appName || activity.process_name || activity.process || "Desktop";
+			activity.appName ||
+			activity.process_name ||
+			activity.process ||
+			"Desktop";
 		const windowTitle = activity.windowTitle || "";
 		let timestamp = activity.timestamp || Date.now();
 		if (timestamp < 10_000_000_000) {

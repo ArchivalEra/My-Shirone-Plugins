@@ -34,13 +34,29 @@ export interface DeviceActivity {
 	media?: MediaInfo;
 	metadata?: Record<string, string>;
 
-	// Mix Space / Shiro compatibility aliases
+	// Fleet v2 / Mix Space compatibility aliases
+	id?: string;
+	name?: string;
+	type?: "desktop" | "laptop" | "server" | "mobile" | "other" | string;
+	offline?: boolean;
+	lastSeen?: number;
 	process_name?: string;
 	process?: string;
 	media_title?: string;
 	media_artist?: string;
 	device?: string;
 	device_id?: string;
+}
+
+/**
+ * Multi-device category summary counts
+ */
+export interface DeviceGroupCounts {
+	desktop: number;
+	laptop: number;
+	server: number;
+	mobile?: number;
+	other?: number;
 }
 
 /**
@@ -57,7 +73,8 @@ export interface ActivityBatchUploadRequest {
 export interface ActivityHistoryResponse {
 	current: DeviceActivity | null;
 	devices: DeviceActivity[];
-	history: DeviceActivity[];
+	history?: DeviceActivity[];
+	groups?: DeviceGroupCounts;
 	serverTime: number;
 }
 

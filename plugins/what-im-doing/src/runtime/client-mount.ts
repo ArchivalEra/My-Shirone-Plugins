@@ -53,7 +53,7 @@ export function initWhatImDoing(options: WhatImDoingOptions = {}): void {
 
 		// Find avatar or profile anchor
 		const targetEl = document.querySelector(config.targetSelector);
-		if (!targetEl || !targetEl.parentElement) {
+		if (!targetEl?.parentElement) {
 			return;
 		}
 
@@ -64,7 +64,10 @@ export function initWhatImDoing(options: WhatImDoingOptions = {}): void {
 		container.style.display = "flex";
 		container.style.justifyContent = "center";
 
-		targetEl.insertAdjacentElement(config.position as InsertPosition, container);
+		targetEl.insertAdjacentElement(
+			config.position as InsertPosition,
+			container,
+		);
 
 		try {
 			activeInstance = mount(WhatImDoingCapsule, {
@@ -102,8 +105,12 @@ export function initWhatImDoing(options: WhatImDoingOptions = {}): void {
 	}
 
 	// Re-mount on Swup SPA navigation
-	const swup = (window as unknown as { swup?: { hooks?: { on: (event: string, cb: () => void) => void } } }).swup;
-	if (swup && swup.hooks) {
+	const swup = (
+		window as unknown as {
+			swup?: { hooks?: { on: (event: string, cb: () => void) => void } };
+		}
+	).swup;
+	if (swup?.hooks) {
 		swup.hooks.on("page:view", () => {
 			cleanup();
 			setTimeout(tryMount, 50);
@@ -117,7 +124,11 @@ export function initWhatImDoing(options: WhatImDoingOptions = {}): void {
 }
 
 function autoInit() {
-	if (typeof window !== "undefined" && window.__WHAT_IM_DOING_CONFIG__ && !window.__WHAT_IM_DOING_MOUNTED__) {
+	if (
+		typeof window !== "undefined" &&
+		window.__WHAT_IM_DOING_CONFIG__ &&
+		!window.__WHAT_IM_DOING_MOUNTED__
+	) {
 		window.__WHAT_IM_DOING_MOUNTED__ = true;
 		initWhatImDoing(window.__WHAT_IM_DOING_CONFIG__);
 	}

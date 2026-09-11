@@ -1,7 +1,10 @@
+import { ok, strictEqual } from "node:assert";
 import { spawn } from "node:child_process";
-import { strictEqual, ok } from "node:assert";
-import { describe, it, before, after } from "node:test";
-import { encodeDeviceActivity, decodeHistoryResponse } from "../dist/protocol/index.js";
+import { after, before, describe, it } from "node:test";
+import {
+	decodeHistoryResponse,
+	encodeDeviceActivity,
+} from "../dist/protocol/index.js";
 
 const TEST_PORT = 18088;
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
@@ -23,7 +26,10 @@ describe("Oracle VPS Activity Hub (vps-hub.mjs)", () => {
 
 		// Wait for server to listen
 		await new Promise((resolve, reject) => {
-			const timeout = setTimeout(() => reject(new Error("Hub failed to start in 5s")), 5000);
+			const timeout = setTimeout(
+				() => reject(new Error("Hub failed to start in 5s")),
+				5000,
+			);
 			serverProc.stdout.on("data", (chunk) => {
 				if (chunk.toString().includes("Oracle Cloud VPS Activity Hub Online")) {
 					clearTimeout(timeout);

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import worker from "../edgeone/activity-worker.js";
 import { encodeDeviceActivity } from "../dist/protocol/index.js";
+import worker from "../edgeone/activity-worker.js";
 
 // In-memory mock for EdgeOne KV
 function createMockKV() {

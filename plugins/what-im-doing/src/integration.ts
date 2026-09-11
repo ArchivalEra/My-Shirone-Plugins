@@ -7,11 +7,13 @@ import type { WhatImDoingOptions } from "./protocol/types.js";
  * Astro Integration for what-im-doing
  * Displays real-time device status and application monitoring above the author avatar.
  */
-export function whatImDoing(options: WhatImDoingOptions = {}): AstroIntegration {
+export function whatImDoing(
+	options: WhatImDoingOptions = {},
+): AstroIntegration {
 	return {
 		name: "@shirone-plugins/what-im-doing",
 		hooks: {
-			"astro:config:setup": ({ injectScript, injectRoute, updateConfig }) => {
+			"astro:config:setup": ({ injectScript, injectRoute }) => {
 				let clientScriptPath = fileURLToPath(
 					new URL("./runtime/client-mount.ts", import.meta.url),
 				);
@@ -32,8 +34,12 @@ if (typeof window !== "undefined") {
 				);
 
 				// Optional local dev API route injection
-				const isRelativeEndpoint = !options.endpoint || options.endpoint.startsWith("/");
-				if (options.enableLocalEndpoint === true || (options.enableLocalEndpoint !== false && isRelativeEndpoint)) {
+				const isRelativeEndpoint =
+					!options.endpoint || options.endpoint.startsWith("/");
+				if (
+					options.enableLocalEndpoint === true ||
+					(options.enableLocalEndpoint !== false && isRelativeEndpoint)
+				) {
 					let routePath = fileURLToPath(
 						new URL("./server/route.ts", import.meta.url),
 					);
@@ -44,7 +50,9 @@ if (typeof window !== "undefined") {
 					}
 
 					injectRoute({
-						pattern: isRelativeEndpoint ? (options.endpoint || "/api/activity") : "/api/activity",
+						pattern: isRelativeEndpoint
+							? options.endpoint || "/api/activity"
+							: "/api/activity",
 						entrypoint: routePath,
 					});
 				}

@@ -1,12 +1,21 @@
 <script lang="ts">
 /**
- * WhatImDoingCapsule — 头像上方状态胶囊与历史抽屉
+ * WhatImDoingCapsule — 头像上方状态胶囊与多设备舰队抽屉
  * Material 3 Expressive 风格设计，纯插拔零侵入。
  */
-import { onDestroy, onMount } from "svelte";
+import { onMount } from "svelte";
 import { decodeHistoryResponse } from "../protocol/protobuf.js";
-import type { ActivityHistoryResponse, DeviceActivity } from "../protocol/types.js";
-import { formatActivitySentence, formatRelativeTime } from "./RelativeTime.js";
+import {
+	type ActivityHistoryResponse,
+	ActivityStatus,
+	type DeviceActivity,
+} from "../protocol/types.js";
+import {
+	formatActivitySentence,
+	formatDateTime,
+	formatOfflineTime,
+	formatRelativeTime,
+} from "./RelativeTime.js";
 
 let {
 	endpoint = "/api/activity",
@@ -22,8 +31,8 @@ let {
 
 let data = $state<ActivityHistoryResponse | null>(null);
 let briefLoading = $state(false);
-let historyLoading = $state(false);
-let historyLoaded = $state(false);
+let fullLoading = $state(false);
+let fullLoaded = $state(false);
 let expanded = $state(false);
 let selectedDeviceId = $state<string>("all");
 let timerId: ReturnType<typeof setInterval> | null = null;
@@ -39,13 +48,19 @@ const currentActivity = $derived(data?.current ?? null);
 const devices = $derived(data?.devices ?? []);
 const allHistory = $derived(data?.history ?? []);
 
-const filteredHistory = $derived.by(() => {
-	if (selectedDeviceId === "all") {
-		return allHistory.slice(0, maxHistoryDisplay);
-	}
-	return allHistory
-		.filter((h) => h.deviceId === selectedDeviceId)
-		.slice(0, maxHistoryDisplay);
+const isOffline = $derived.by(() => {
+	if (!currentActivity) return true;
+	if (currentActivity.offline) return true;
+	if (currentActivity.status === ActivityStatus.OFFLINE) return true;
+	const ts = currentActivity.lastSeen ?? currentActivity.timestamp;
+	if (ts && currentTime - ts > 120_000) return true;
+	return false;
+});
+
+const offlineTimeText = $derived.by(() => {
+	if (!isOffline) return "";
+	const ts = currentActivity?.lastSeen ?? currentActivity?.timestamp ?? 0;
+	return formatOfflineTime(ts, currentTime, "zh");
 });
 
 const formatted = $derived(
@@ -53,6 +68,7 @@ const formatted = $derived(
 );
 
 const statusLabel = $derived.by(() => {
+	if (isOffline) return "离线";
 	switch (formatted.statusType) {
 		case "active":
 			return "正在活跃";
@@ -63,6 +79,68 @@ const statusLabel = $derived.by(() => {
 		default:
 			return "离线";
 	}
+});
+
+const groupMeta: Record<string, { label: string; icon: string }> = {
+	desktop: { label: "台式工作站", icon: "🖥️" },
+	laptop: { label: "便携笔记本", icon: "💻" },
+	server: { label: "服务器集群", icon: "🖧" },
+	mobile: { label: "移动设备", icon: "📱" },
+	other: { label: "其它设备", icon: "📟" },
+};
+
+const groupedDevices = $derived.by(() => {
+	const all =
+		devices.length > 0 ? devices : currentActivity ? [currentActivity] : [];
+
+	const map: Record<string, DeviceActivity[]> = {
+		desktop: [],
+		laptop: [],
+		server: [],
+		other: [],
+	};
+
+	for (const dev of all) {
+		const rawType = (dev.type || "desktop").toLowerCase();
+		if (rawType === "desktop") map.desktop.push(dev);
+		else if (rawType === "laptop") map.laptop.push(dev);
+		else if (rawType === "server") map.server.push(dev);
+		else map.other.push(dev);
+	}
+
+	const order: Array<"desktop" | "laptop" | "server" | "other"> = [
+		"desktop",
+		"laptop",
+		"server",
+		"other",
+	];
+
+	return order
+		.filter((k) => map[k].length > 0)
+		.map((k) => ({
+			key: k,
+			label: groupMeta[k]?.label ?? k,
+			icon: groupMeta[k]?.icon ?? "💻",
+			devices: map[k],
+		}));
+});
+
+const onlineDeviceCount = $derived(
+	devices.filter(
+		(d) =>
+			!d.offline &&
+			d.status !== ActivityStatus.OFFLINE &&
+			currentTime - (d.lastSeen ?? d.timestamp) <= 120_000,
+	).length,
+);
+
+const filteredHistory = $derived.by(() => {
+	if (selectedDeviceId === "all") {
+		return allHistory.slice(0, maxHistoryDisplay);
+	}
+	return allHistory
+		.filter((h) => (h.deviceId || h.id) === selectedDeviceId)
+		.slice(0, maxHistoryDisplay);
 });
 
 function getUrlWithParam(param: string): string {
@@ -77,7 +155,7 @@ async function fetchBriefStatus() {
 		const targetUrl = getUrlWithParam("brief=1");
 		const res = await fetch(targetUrl, {
 			headers: {
-				Accept: "application/x-protobuf, application/json",
+				Accept: "application/json, application/x-protobuf",
 			},
 		});
 
@@ -87,19 +165,24 @@ async function fetchBriefStatus() {
 		if (contentType.includes("application/x-protobuf")) {
 			const buffer = await res.arrayBuffer();
 			const decoded = decodeHistoryResponse(new Uint8Array(buffer));
-			// Preserve existing history if already loaded
 			data = {
 				current: decoded.current,
-				devices: decoded.devices.length > 0 ? decoded.devices : (data?.devices ?? []),
+				devices:
+					decoded.devices.length > 0 ? decoded.devices : (data?.devices ?? []),
 				history: data?.history ?? [],
+				groups: data?.groups,
 				serverTime: decoded.serverTime,
 			};
 		} else {
 			const json = (await res.json()) as ActivityHistoryResponse;
 			data = {
 				current: json.current,
-				devices: json.devices?.length > 0 ? json.devices : (data?.devices ?? []),
+				devices:
+					json.devices && json.devices.length > 0
+						? json.devices
+						: (data?.devices ?? []),
 				history: data?.history ?? [],
+				groups: json.groups ?? data?.groups,
 				serverTime: json.serverTime,
 			};
 		}
@@ -111,14 +194,14 @@ async function fetchBriefStatus() {
 	}
 }
 
-async function fetchFullHistory() {
-	if (historyLoading) return;
-	historyLoading = true;
+async function fetchFullFleetStatus() {
+	if (fullLoading) return;
+	fullLoading = true;
 	try {
-		const targetUrl = getUrlWithParam("history=1");
+		const targetUrl = endpoint;
 		const res = await fetch(targetUrl, {
 			headers: {
-				Accept: "application/x-protobuf, application/json",
+				Accept: "application/json, application/x-protobuf",
 			},
 		});
 
@@ -131,12 +214,12 @@ async function fetchFullHistory() {
 		} else {
 			data = (await res.json()) as ActivityHistoryResponse;
 		}
-		historyLoaded = true;
+		fullLoaded = true;
 		currentTime = Date.now();
 	} catch (err) {
-		console.debug("[what-im-doing] History fetch paused:", err);
+		console.debug("[what-im-doing] Full fleet status fetch paused:", err);
 	} finally {
-		historyLoading = false;
+		fullLoading = false;
 	}
 }
 
@@ -204,9 +287,9 @@ async function toggleExpand() {
 	expanded = !expanded;
 	if (expanded) {
 		updatePosition();
-		// Strictly on-intent: Only request full history upon user interaction
-		if (!historyLoaded && !historyLoading) {
-			await fetchFullHistory();
+		// Strictly on-intent: Only request full fleet details upon user expansion
+		if (!fullLoaded && !fullLoading) {
+			await fetchFullFleetStatus();
 		}
 	}
 }
@@ -217,27 +300,27 @@ function handleKeydown(e: KeyboardEvent) {
 	}
 }
 
-	$effect(() => {
-		if (typeof document === "undefined") return;
-		if (expanded) {
-			const originalOverflow = document.body.style.overflow;
-			const originalPaddingRight = document.body.style.paddingRight;
-			const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
-			if (scrollbarWidth > 0) {
-				document.body.style.paddingRight = `${scrollbarWidth}px`;
-			}
-			document.body.style.overflow = "hidden";
-
-			return () => {
-				document.body.style.overflow = originalOverflow;
-				document.body.style.paddingRight = originalPaddingRight;
-			};
+$effect(() => {
+	if (typeof document === "undefined") return;
+	if (expanded) {
+		const originalOverflow = document.body.style.overflow;
+		const originalPaddingRight = document.body.style.paddingRight;
+		const scrollbarWidth =
+			window.innerWidth - document.documentElement.clientWidth;
+		if (scrollbarWidth > 0) {
+			document.body.style.paddingRight = `${scrollbarWidth}px`;
 		}
-	});
+		document.body.style.overflow = "hidden";
 
-	onMount(() => {
-	// Rule 2.4: Zero eager network fetch on mount.
-	// We wait for the capsule to actually enter the user's viewport.
+		return () => {
+			document.body.style.overflow = originalOverflow;
+			document.body.style.paddingRight = originalPaddingRight;
+		};
+	}
+});
+
+onMount(() => {
+	// Viewport lazy contract: Never eagerly fetch on mount
 	if (typeof IntersectionObserver !== "undefined" && capsuleEl) {
 		observer = new IntersectionObserver(
 			(entries) => {
@@ -255,7 +338,6 @@ function handleKeydown(e: KeyboardEvent) {
 		);
 		observer.observe(capsuleEl);
 	} else {
-		// Fallback if IntersectionObserver is unavailable
 		hasEnteredViewport = true;
 		fetchBriefStatus();
 		startPolling();
@@ -293,18 +375,24 @@ function handleKeydown(e: KeyboardEvent) {
 	<!-- 顶部状态胶囊：淡强调色填充标签风格，多行自适应高可读性 -->
 	<button
 		type="button"
-		class={`wid-capsule wid-capsule--${formatted.statusType}`}
+		class={`wid-capsule wid-capsule--${isOffline ? "offline" : formatted.statusType}`}
 		onclick={toggleExpand}
 		aria-expanded={expanded}
 		aria-label="查看我的实时设备与活动历史"
 	>
-		<!-- 头部状态行：状态指示灯 + 状态名 + 相对时间 + 展开提示 -->
+		<!-- 头部状态行：状态指示灯 + 状态名 + 相对/离线时间 + 展开提示 -->
 		<div class="wid-capsule__header-row">
 			<span class="wid-capsule__status-tag">
 				<span class="wid-capsule__dot"></span>
 				<span class="wid-capsule__status-name">{statusLabel}</span>
 			</span>
-			{#if formatted.relativeTime}
+			{#if isOffline}
+				{#if offlineTimeText}
+					<span class="wid-capsule__sep">·</span>
+					<span class="wid-capsule__time">{offlineTimeText}</span>
+				{/if}
+			{:else if formatted.relativeTime}
+				<span class="wid-capsule__sep">·</span>
 				<span class="wid-capsule__time">{formatted.relativeTime}</span>
 			{/if}
 			<span class="wid-capsule__toggle-hint">
@@ -325,9 +413,20 @@ function handleKeydown(e: KeyboardEvent) {
 			</span>
 		</div>
 
-		<!-- 主内容行：应用名称（加粗） + 窗口标题/媒体信息（多行自适应，清晰透明） -->
+		<!-- 主内容行：
+		     在线态：应用名 窗口名（或媒体播放）
+		     离线态：最后在使用: xxx -->
 		<div class="wid-capsule__detail-row">
-			{#if currentActivity?.media?.title}
+			{#if isOffline}
+				<span class="wid-capsule__offline-text">
+					<span class="wid-capsule__offline-prefix">最后在使用:</span>
+					<strong class="wid-capsule__app-name">{currentActivity?.appName || "无记录"}</strong>
+					{#if currentActivity?.windowTitle && currentActivity.windowTitle !== currentActivity.appName}
+						<span class="wid-capsule__sep">·</span>
+						<span class="wid-capsule__window-title">{currentActivity.windowTitle}</span>
+					{/if}
+				</span>
+			{:else if currentActivity?.media?.title}
 				<span class="wid-capsule__media-icon">🎵</span>
 				<strong class="wid-capsule__app-name">{currentActivity.media.title}</strong>
 				{#if currentActivity.media.artist}
@@ -369,6 +468,7 @@ function handleKeydown(e: KeyboardEvent) {
 			<!-- 向下呼应锚点指示箭头 -->
 			<div class="wid-popover__anchor-arrow" aria-hidden="true"></div>
 
+			<!-- 弹窗顶栏 -->
 			<div class="wid-popover__header">
 				<div class="wid-popover__title">
 					<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
@@ -377,7 +477,7 @@ function handleKeydown(e: KeyboardEvent) {
 							d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 10h2v7H7zm4-3h2v10h-2zm4 6h2v4h-2z"
 						/>
 					</svg>
-					<span>设备与活动状态</span>
+					<span>设备舰队与实时活动</span>
 				</div>
 				<button
 					type="button"
@@ -389,14 +489,17 @@ function handleKeydown(e: KeyboardEvent) {
 				</button>
 			</div>
 
-			<!-- 当前活跃窗口细节 -->
+			<!-- 当前仲裁焦点设备状态概览 -->
 			{#if currentActivity}
-				<div class="wid-popover__current">
+				<div class="wid-popover__current" class:wid-popover__current--offline={isOffline}>
 					<div class="wid-popover__current-app">
-						<span class="wid-tag wid-tag--primary">{currentActivity.appName}</span>
-						<span class="wid-popover__current-device">{currentActivity.deviceName}</span>
+						<span class="wid-tag" class:wid-tag--primary={!isOffline} class:wid-tag--muted={isOffline}>
+							{isOffline ? "最后使用" : "当前活跃"}
+						</span>
+						<strong class="wid-popover__current-appname">{currentActivity.appName || "未知应用"}</strong>
+						<span class="wid-popover__current-device">@{currentActivity.deviceName || currentActivity.name || currentActivity.deviceId}</span>
 					</div>
-					{#if currentActivity.media?.title}
+					{#if currentActivity.media?.title && !isOffline}
 						<div class="wid-popover__media">
 							<span class="wid-popover__media-icon">🎵</span>
 							<span class="wid-popover__media-text">
@@ -404,51 +507,123 @@ function handleKeydown(e: KeyboardEvent) {
 							</span>
 						</div>
 					{/if}
-					{#if currentActivity.windowTitle}
+					{#if currentActivity.windowTitle && currentActivity.windowTitle !== currentActivity.appName}
 						<div class="wid-popover__window-title" title={currentActivity.windowTitle}>
 							"{currentActivity.windowTitle}"
 						</div>
 					{/if}
-					{#if currentActivity.osInfo}
-						<div class="wid-popover__os-info">
-							{currentActivity.osInfo}
-						</div>
-					{/if}
+					<div class="wid-popover__current-footer">
+						{#if isOffline}
+							<span class="wid-popover__last-active">
+								{offlineTimeText || `最后活跃: ${formatRelativeTime(currentActivity.lastSeen ?? currentActivity.timestamp, currentTime, "zh")}`}
+							</span>
+						{:else}
+							<span class="wid-popover__active-hint">
+								🟢 刚刚活跃于 {currentActivity.deviceName || currentActivity.name || currentActivity.deviceId}
+							</span>
+						{/if}
+						{#if currentActivity.osInfo}
+							<span class="wid-popover__os-info">{currentActivity.osInfo}</span>
+						{/if}
+					</div>
 				</div>
 			{/if}
 
-			<!-- 多设备切换 Tab (如果存在多台设备) -->
-			{#if devices.length > 1}
-				<div class="wid-popover__devices" role="tablist">
-					<button
-						type="button"
-						class="wid-device-chip"
-						class:wid-device-chip--active={selectedDeviceId === "all"}
-						onclick={() => (selectedDeviceId = "all")}
-					>
-						全部设备 ({devices.length})
-					</button>
-					{#each devices as dev}
-						<button
-							type="button"
-							class="wid-device-chip"
-							class:wid-device-chip--active={selectedDeviceId === dev.deviceId}
-							onclick={() => (selectedDeviceId = dev.deviceId)}
-						>
-							{dev.deviceName || dev.deviceId}
-						</button>
-					{/each}
-				</div>
-			{/if}
-
-			<!-- 历史时间轴 -->
-			<div class="wid-popover__history">
-				<div class="wid-popover__history-title">最近记录</div>
-				{#if historyLoading}
-					<div class="wid-popover__empty">正在拉取历史记录...</div>
-				{:else if filteredHistory.length === 0}
-					<div class="wid-popover__empty">暂无历史记录</div>
+			<!-- 多设备分类卡片矩阵 -->
+			<div class="wid-fleet">
+				{#if fullLoading && devices.length === 0}
+					<div class="wid-popover__empty">正在拉取设备舰队矩阵...</div>
+				{:else if groupedDevices.length === 0}
+					<div class="wid-popover__empty">当前暂无已登记设备</div>
 				{:else}
+					{#each groupedDevices as group}
+						<div class="wid-group">
+							<div class="wid-group__header">
+								<span class="wid-group__icon">{group.icon}</span>
+								<span class="wid-group__label">{group.label}</span>
+								<span class="wid-group__count">{group.devices.length}</span>
+							</div>
+
+							<div class="wid-group__grid">
+								{#each group.devices as dev}
+									{@const devOffline = dev.offline || dev.status === ActivityStatus.OFFLINE || (currentTime - (dev.lastSeen ?? dev.timestamp) > 120000)}
+									<div class="wid-device-card" class:wid-device-card--offline={devOffline} class:wid-device-card--active={!devOffline && dev.status === ActivityStatus.ACTIVE}>
+										<div class="wid-device-card__head">
+											<div class="wid-device-card__name-wrapper">
+												<span
+													class="wid-device-card__dot"
+													class:wid-device-card__dot--active={!devOffline && dev.status === ActivityStatus.ACTIVE}
+													class:wid-device-card__dot--idle={!devOffline && dev.status === ActivityStatus.IDLE}
+													class:wid-device-card__dot--away={!devOffline && dev.status === ActivityStatus.AWAY}
+													class:wid-device-card__dot--offline={devOffline}
+												></span>
+												<span class="wid-device-card__name">{dev.name || dev.deviceName || dev.id || dev.deviceId}</span>
+											</div>
+											<span
+												class="wid-device-card__badge"
+												class:wid-device-card__badge--active={!devOffline && dev.status === ActivityStatus.ACTIVE}
+												class:wid-device-card__badge--idle={!devOffline && dev.status === ActivityStatus.IDLE}
+												class:wid-device-card__badge--offline={devOffline}
+											>
+												{#if devOffline}
+													离线
+												{:else if dev.status === ActivityStatus.ACTIVE}
+													正在活跃
+												{:else if dev.status === ActivityStatus.IDLE}
+													空闲
+												{:else if dev.status === ActivityStatus.AWAY}
+													离开
+												{:else}
+													在线
+												{/if}
+											</span>
+										</div>
+
+										<div class="wid-device-card__body">
+											{#if devOffline}
+												<div class="wid-device-card__app">
+													<span class="wid-device-card__muted-label">最后使用:</span>
+													<span class="wid-device-card__app-title">{dev.appName || "无记录"}</span>
+													{#if dev.windowTitle && dev.windowTitle !== dev.appName}
+														<span class="wid-device-card__sep">·</span>
+														<span class="wid-device-card__win-title" title={dev.windowTitle}>{dev.windowTitle}</span>
+													{/if}
+												</div>
+												<div class="wid-device-card__time">
+													最后活跃: {formatRelativeTime(dev.lastSeen ?? dev.timestamp, currentTime, "zh")}
+													{#if dev.lastSeen || dev.timestamp}
+														<span class="wid-device-card__abs-time">({formatDateTime(dev.lastSeen ?? dev.timestamp)})</span>
+													{/if}
+												</div>
+											{:else}
+												<div class="wid-device-card__app">
+													<span class="wid-device-card__app-title">{dev.appName || "活动中"}</span>
+													{#if dev.windowTitle && dev.windowTitle !== dev.appName}
+														<span class="wid-device-card__sep">·</span>
+														<span class="wid-device-card__win-title" title={dev.windowTitle}>{dev.windowTitle}</span>
+													{/if}
+												</div>
+												<div class="wid-device-card__time">
+													{#if dev.status === ActivityStatus.IDLE && dev.idleSeconds && dev.idleSeconds > 60}
+														已空闲 {Math.floor(dev.idleSeconds / 60)} 分钟
+													{:else}
+														活跃于 {formatRelativeTime(dev.lastSeen ?? dev.timestamp, currentTime, "zh")}
+													{/if}
+												</div>
+											{/if}
+										</div>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/each}
+				{/if}
+			</div>
+
+			<!-- 如果存在历史记录，保留向下兼容的时间轴 -->
+			{#if allHistory.length > 0}
+				<div class="wid-popover__history">
+					<div class="wid-popover__history-title">最近活动历史</div>
 					<ul class="wid-timeline">
 						{#each filteredHistory as item}
 							<li class="wid-timeline__item">
@@ -464,18 +639,24 @@ function handleKeydown(e: KeyboardEvent) {
 										</div>
 									{/if}
 									<div class="wid-timeline__device">
-										{item.deviceName}
+										{item.deviceName || item.name}
 									</div>
 								</div>
 							</li>
 						{/each}
 					</ul>
-				{/if}
-			</div>
+				</div>
+			{/if}
 
 			<div class="wid-popover__footer">
-				<span class="wid-popover__proto-badge">Protobuf v3 Ingested</span>
-				<span class="wid-popover__pulse-rate">每 {Math.round(refreshInterval / 1000)}s 同步</span>
+				<span class="wid-popover__proto-badge">Cloudflare D1 Fleet Hub</span>
+				<span class="wid-popover__pulse-rate">
+					{#if onlineDeviceCount > 0}
+						🟢 {onlineDeviceCount} 台在线 · 每 {Math.round(refreshInterval / 1000)}s 同步
+					{:else}
+						⚪ 全设备离线 · 每 {Math.round(refreshInterval / 1000)}s 轮询
+					{/if}
+				</span>
 			</div>
 		</div>
 	</div>
@@ -517,6 +698,12 @@ function handleKeydown(e: KeyboardEvent) {
 	border-color: var(--primary, #6750a4);
 	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 	transform: translateY(-1px);
+}
+
+.wid-capsule--offline {
+	background: var(--surface-container-low, rgba(0, 0, 0, 0.04));
+	color: var(--on-surface-variant, #49454f);
+	border-color: var(--outline-variant, rgba(0, 0, 0, 0.12));
 }
 
 .wid-capsule__header-row {
@@ -562,7 +749,7 @@ function handleKeydown(e: KeyboardEvent) {
 
 .wid-capsule__time {
 	font-size: 0.675rem;
-	opacity: 0.8;
+	opacity: 0.85;
 }
 
 .wid-capsule__toggle-hint {
@@ -589,9 +776,25 @@ function handleKeydown(e: KeyboardEvent) {
 	color: var(--on-surface, #1c1b1f);
 }
 
+.wid-capsule__offline-text {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.25rem;
+	flex-wrap: wrap;
+}
+
+.wid-capsule__offline-prefix {
+	opacity: 0.75;
+	font-weight: 500;
+}
+
 .wid-capsule__app-name {
 	font-weight: 700;
 	color: var(--primary, #6750a4);
+}
+
+.wid-capsule--offline .wid-capsule__app-name {
+	color: var(--on-surface, #1c1b1f);
 }
 
 .wid-capsule__sep {
@@ -603,7 +806,7 @@ function handleKeydown(e: KeyboardEvent) {
 	opacity: 0.88;
 }
 
-.wid-capsule__media-tag {
+.wid-capsule__media-icon {
 	margin-right: 0.2rem;
 }
 
@@ -729,21 +932,40 @@ function handleKeydown(e: KeyboardEvent) {
 	border: 1px solid var(--outline-variant, rgba(0, 0, 0, 0.08));
 }
 
+.wid-popover__current--offline {
+	opacity: 0.9;
+	background: rgba(0, 0, 0, 0.02);
+}
+
 .wid-popover__current-app {
 	display: flex;
 	align-items: center;
-	gap: 0.5rem;
+	gap: 0.4rem;
 	margin-bottom: 0.375rem;
+	flex-wrap: wrap;
+}
+
+.wid-popover__current-appname {
+	font-size: 0.85rem;
+	color: var(--on-surface, #1c1b1f);
 }
 
 .wid-tag {
 	display: inline-block;
-	font-size: 0.75rem;
+	font-size: 0.6875rem;
 	font-weight: 600;
-	padding: 0.125rem 0.5rem;
+	padding: 0.125rem 0.45rem;
 	border-radius: 6px;
+}
+
+.wid-tag--primary {
 	background: var(--primary-container, #eaddff);
 	color: var(--on-primary-container, #21005d);
+}
+
+.wid-tag--muted {
+	background: rgba(0, 0, 0, 0.08);
+	color: var(--on-surface-variant, #49454f);
 }
 
 .wid-popover__current-device {
@@ -786,36 +1008,207 @@ function handleKeydown(e: KeyboardEvent) {
 	margin-bottom: 0.25rem;
 }
 
+.wid-popover__current-footer {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-top: 0.35rem;
+	font-size: 0.6875rem;
+	color: var(--outline, #79747e);
+}
+
+.wid-popover__active-hint {
+	color: #047857;
+	font-weight: 500;
+}
+
+.wid-popover__last-active {
+	color: var(--outline, #79747e);
+}
+
 .wid-popover__os-info {
 	font-size: 0.6875rem;
 	color: var(--outline, #79747e);
 }
 
-.wid-popover__devices {
+/* 舰队设备矩阵群组 */
+.wid-fleet {
 	display: flex;
-	gap: 0.375rem;
-	overflow-x: auto;
-	padding-bottom: 0.5rem;
+	flex-direction: column;
+	gap: 0.75rem;
 	margin-bottom: 0.75rem;
 }
 
-.wid-device-chip {
-	background: var(--surface-container-high, rgba(0, 0, 0, 0.05));
-	border: 1px solid transparent;
-	border-radius: 9999px;
-	padding: 0.25rem 0.625rem;
-	font-size: 0.6875rem;
+.wid-group__header {
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
+	font-size: 0.75rem;
+	font-weight: 600;
 	color: var(--on-surface-variant, #49454f);
-	cursor: pointer;
+	margin-bottom: 0.35rem;
+}
+
+.wid-group__icon {
+	font-size: 0.875rem;
+}
+
+.wid-group__count {
+	font-size: 0.65rem;
+	background: var(--surface-container-high, rgba(0, 0, 0, 0.06));
+	padding: 0.05rem 0.4rem;
+	border-radius: 9999px;
+	color: var(--outline, #79747e);
+}
+
+.wid-group__grid {
+	display: flex;
+	flex-direction: column;
+	gap: 0.45rem;
+}
+
+.wid-device-card {
+	background: var(--surface-container-low, rgba(0, 0, 0, 0.03));
+	border: 1px solid var(--outline-variant, rgba(0, 0, 0, 0.08));
+	border-radius: 10px;
+	padding: 0.5rem 0.65rem;
+	transition: background-color 0.15s ease, border-color 0.15s ease;
+	backdrop-filter: none !important;
+	-webkit-backdrop-filter: none !important;
+}
+
+.wid-device-card--active {
+	border-color: color-mix(in oklab, #10b981 35%, transparent);
+	background: color-mix(in oklab, #10b981 5%, var(--card-bg, #ffffff));
+}
+
+.wid-device-card--offline {
+	opacity: 0.8;
+}
+
+.wid-device-card__head {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 0.25rem;
+}
+
+.wid-device-card__name-wrapper {
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
+	min-width: 0;
+}
+
+.wid-device-card__dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: #9ca3af;
+	flex-shrink: 0;
+}
+
+.wid-device-card__dot--active {
+	background: #10b981;
+	box-shadow: 0 0 4px #10b981;
+}
+
+.wid-device-card__dot--idle {
+	background: #f59e0b;
+}
+
+.wid-device-card__dot--away {
+	background: #f97316;
+}
+
+.wid-device-card__dot--offline {
+	background: #9ca3af;
+}
+
+.wid-device-card__name {
+	font-size: 0.75rem;
+	font-weight: 600;
+	color: var(--on-surface, #1c1b1f);
+	overflow: hidden;
+	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
-.wid-device-chip--active {
-	background: var(--primary, #6750a4);
-	color: var(--on-primary, #ffffff);
+.wid-device-card__badge {
+	font-size: 0.625rem;
+	padding: 0.1rem 0.35rem;
+	border-radius: 4px;
 	font-weight: 500;
+	flex-shrink: 0;
 }
 
+.wid-device-card__badge--active {
+	background: color-mix(in oklab, #10b981 18%, transparent);
+	color: #047857;
+}
+
+.wid-device-card__badge--idle {
+	background: color-mix(in oklab, #f59e0b 18%, transparent);
+	color: #b45309;
+}
+
+.wid-device-card__badge--offline {
+	background: rgba(0, 0, 0, 0.06);
+	color: var(--outline, #79747e);
+}
+
+.wid-device-card__body {
+	display: flex;
+	flex-direction: column;
+	gap: 0.15rem;
+	font-size: 0.7rem;
+}
+
+.wid-device-card__app {
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.wid-device-card__muted-label {
+	color: var(--outline, #79747e);
+	font-size: 0.65rem;
+}
+
+.wid-device-card__app-title {
+	font-weight: 600;
+	color: var(--primary, #6750a4);
+}
+
+.wid-device-card--offline .wid-device-card__app-title {
+	color: var(--on-surface, #1c1b1f);
+}
+
+.wid-device-card__sep {
+	opacity: 0.4;
+}
+
+.wid-device-card__win-title {
+	opacity: 0.85;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.wid-device-card__time {
+	font-size: 0.65rem;
+	color: var(--outline, #79747e);
+}
+
+.wid-device-card__abs-time {
+	opacity: 0.8;
+	margin-left: 0.25rem;
+}
+
+/* 历史时间轴 */
 .wid-popover__history-title {
 	font-size: 0.75rem;
 	font-weight: 600;
@@ -827,7 +1220,7 @@ function handleKeydown(e: KeyboardEvent) {
 	list-style: none;
 	padding: 0;
 	margin: 0;
-	max-height: 180px;
+	max-height: 160px;
 	overflow-y: auto;
 }
 

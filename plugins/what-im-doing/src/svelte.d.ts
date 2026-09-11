@@ -1,16 +1,18 @@
 declare module "*.svelte" {
-	import type { Component } from "svelte";
-	const component: any;
+	const component: unknown;
 	export default component;
 }
 
 declare module "svelte" {
-	export type Component<T = any> = any;
+	export type Component<T = Record<string, unknown>> = unknown;
 	export function mount(
-		component: any,
-		options: { target: Element | Document | ShadowRoot; props?: Record<string, any> },
-	): any;
-	export function unmount(instance: any): void;
-	export function onMount(fn: () => any): void;
-	export function onDestroy(fn: () => any): void;
+		component: unknown,
+		options: {
+			target: Element | Document | ShadowRoot;
+			props?: Record<string, unknown>;
+		},
+	): unknown;
+	export function unmount(instance: unknown): void;
+	export function onMount(fn: () => unknown): void;
+	export function onDestroy(fn: () => unknown): void;
 }

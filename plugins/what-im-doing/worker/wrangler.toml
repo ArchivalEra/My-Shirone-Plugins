@@ -1,0 +1,21 @@
+name = "what-im-doing-hub"
+main = "worker.js"
+compatibility_date = "2024-09-01"
+
+# Cloudflare D1 Database Binding
+[[d1_databases]]
+binding = "DB"
+database_name = "what-im-doing-fleet"
+database_id = "YOUR_D1_DATABASE_ID_HERE"
+
+# Optional Standalone Security:
+# If not using Cloudflare Zero Trust Access for /admin, set a secret via:
+#   npx wrangler secret put ADMIN_KEY
+# Or declare plain-text for dev:
+# [vars]
+# ADMIN_KEY = "dev_secret_key"
+
+# Observability
+[observability]
+enabled = true
+
