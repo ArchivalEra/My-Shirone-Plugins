@@ -24,7 +24,7 @@ export function initWhatImDoing(options: WhatImDoingOptions = {}): void {
 	const config = {
 		endpoint: options.endpoint || "/api/activity",
 		maxHistoryDisplay: options.maxHistoryDisplay ?? 5,
-		refreshInterval: options.refreshInterval ?? 30000,
+		refreshInterval: options.refreshInterval ?? 0,
 		targetSelector:
 			options.targetSelector || 'a[aria-label="Go to About Page"]',
 		position: options.position || "beforebegin",

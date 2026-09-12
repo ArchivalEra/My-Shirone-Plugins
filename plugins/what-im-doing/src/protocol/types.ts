@@ -95,8 +95,8 @@ export interface WhatImDoingOptions {
 	maxHistoryDisplay?: number;
 
 	/**
-	 * Client polling interval in milliseconds
-	 * Default: 30000 (30 seconds). Set to 0 to disable periodic polling.
+	 * Client polling interval in milliseconds.
+	 * Default: 0 (disabled by default for zero-overhead browsing). Set > 0 only if background periodic polling is desired.
 	 */
 	refreshInterval?: number;
 
