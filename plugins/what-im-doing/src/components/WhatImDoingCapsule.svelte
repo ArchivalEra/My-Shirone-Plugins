@@ -35,6 +35,7 @@ let {
 let data = $state<ActivityHistoryResponse | null>(null);
 let loading = $state(false);
 let isRefreshing = $state(false);
+let fetchError = $state<string | null>(null);
 let expanded = $state(false);
 let selectedDeviceId = $state<string>("all");
 let currentTime = $state(Date.now());
@@ -151,13 +152,17 @@ async function fetchSnapshot(manual = false) {
 	if (manual) isRefreshing = true;
 
 	try {
+		fetchError = null;
 		const res = await fetch(endpoint, {
 			headers: {
 				Accept: "application/json, application/x-protobuf",
 			},
 		});
 
-		if (!res.ok) return;
+		if (!res.ok) {
+			fetchError = `状态服务响应异常 (${res.status})`;
+			return;
+		}
 
 		const contentType = res.headers.get("content-type") ?? "";
 		if (contentType.includes("application/x-protobuf")) {
@@ -167,7 +172,9 @@ async function fetchSnapshot(manual = false) {
 			data = (await res.json()) as ActivityHistoryResponse;
 		}
 		currentTime = Date.now();
+		fetchError = null;
 	} catch (err) {
+		fetchError = "无法连接至状态服务器";
 		console.debug("[what-im-doing] Telemetry fetch paused:", err);
 	} finally {
 		loading = false;
@@ -477,6 +484,17 @@ onMount(() => {
 				<div class="wid-fleet">
 					{#if loading && !data}
 						<div class="wid-panel__empty">正在获取设备状态...</div>
+					{:else if fetchError && !data}
+						<div class="wid-panel__empty wid-panel__empty--error">
+							<span>{fetchError}</span>
+							<button
+								type="button"
+								class="wid-panel__retry-btn"
+								onclick={() => fetchSnapshot(true)}
+							>
+								点击重试
+							</button>
+						</div>
 					{:else if groupedDevices.length === 0}
 						<div class="wid-panel__empty">当前暂无已登记设备</div>
 					{:else}

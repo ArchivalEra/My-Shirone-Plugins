@@ -33,13 +33,14 @@ export const capsuleStyles = `
 	border: 1px solid var(--outline-variant, rgba(0, 0, 0, 0.12));
 	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
 	font-size: 0.75rem;
-	line-height: 1;
 	font-weight: 500;
 	cursor: pointer;
 	text-decoration: none;
 	user-select: none;
 	max-width: min(100%, 260px);
 	box-sizing: border-box;
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
 	transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 	backdrop-filter: none !important;
 	-webkit-backdrop-filter: none !important;
@@ -192,7 +193,7 @@ export const capsuleStyles = `
 @media (min-width: 768px) {
 	.wid-panel {
 		position: fixed !important;
-		bottom: var(--anchor-bottom, 200px) !important;
+		bottom: clamp(16px, var(--anchor-bottom, 200px), calc(100vh - 440px)) !important;
 		left: var(--anchor-left, 50%) !important;
 		transform: translate(-50%, -16px) !important;
 		width: min(92vw, 420px) !important;
@@ -238,7 +239,7 @@ export const capsuleStyles = `
 		top: auto !important;
 		transform: translateY(0) !important;
 		width: 100% !important;
-		max-height: 82vh !important;
+		max-height: min(82vh, 82dvh) !important;
 		background: var(--card-bg, #ffffff) !important;
 		border-radius: 24px 24px 0 0 !important;
 		border: none !important;
@@ -249,6 +250,7 @@ export const capsuleStyles = `
 		display: flex !important;
 		flex-direction: column !important;
 		overflow: hidden !important;
+		touch-action: manipulation;
 		animation: wid-mobile-slide-up 0.24s cubic-bezier(0.1, 0.9, 0.2, 1) !important;
 	}
 
@@ -684,6 +686,36 @@ export const capsuleStyles = `
 	color: var(--on-surface-variant, #49454f);
 	background: rgba(0, 0, 0, 0.02);
 	border-radius: 8px;
+}
+
+.wid-panel__empty--error {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.5rem;
+	color: var(--error, #ba1a1a);
+	background: color-mix(in oklab, var(--error-container, #ffdad6) 30%, transparent);
+	border: 1px solid var(--error, rgba(186, 26, 26, 0.2));
+}
+
+.wid-panel__retry-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0.35rem 0.85rem;
+	border-radius: 6px;
+	border: 1px solid var(--outline-variant, rgba(0, 0, 0, 0.12));
+	background: var(--surface-container-high, #f3edf7);
+	color: var(--on-surface, #1c1b1f);
+	font-size: 0.75rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background-color 0.15s ease;
+}
+
+.wid-panel__retry-btn:hover {
+	background: var(--primary, #6750a4);
+	color: var(--on-primary, #ffffff);
 }
 
 .wid-panel__footer {

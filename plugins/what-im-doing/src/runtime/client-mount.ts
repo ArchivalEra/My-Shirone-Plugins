@@ -34,15 +34,26 @@ export function initWhatImDoing(options: WhatImDoingOptions = {}): void {
 		routeFilter: options.routeFilter,
 	};
 
+	let retryCount = 0;
+	const MAX_RETRIES = 25;
+	let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
 	function isPathAllowed(): boolean {
 		if (!config.routeFilter || config.routeFilter.length === 0) {
 			return true;
 		}
-		const pathname = window.location.pathname;
-		return config.routeFilter.some((filter) => pathname.startsWith(filter));
+		const pathname = window.location.pathname.toLowerCase();
+		return config.routeFilter.some((filter) =>
+			pathname.startsWith(filter.toLowerCase()),
+		);
 	}
 
 	function tryMount() {
+		if (retryTimer) {
+			clearTimeout(retryTimer);
+			retryTimer = null;
+		}
+
 		// Strict on-intent lazy gating: only mount on permitted routes (e.g. /MangoMesa)
 		if (!isPathAllowed()) {
 			cleanup();
@@ -57,8 +68,13 @@ export function initWhatImDoing(options: WhatImDoingOptions = {}): void {
 		// Find avatar or profile anchor
 		const targetEl = document.querySelector(config.targetSelector);
 		if (!targetEl?.parentElement) {
+			if (retryCount < MAX_RETRIES) {
+				retryCount++;
+				retryTimer = setTimeout(tryMount, 80);
+			}
 			return;
 		}
+		retryCount = 0;
 
 		// Create portal container
 		const container = document.createElement("div");
@@ -84,10 +100,17 @@ export function initWhatImDoing(options: WhatImDoingOptions = {}): void {
 			activeContainer = container;
 		} catch (err) {
 			console.error("[what-im-doing] Failed to mount Svelte capsule:", err);
+			container.remove();
+			activeContainer = null;
 		}
 	}
 
 	function cleanup() {
+		if (retryTimer) {
+			clearTimeout(retryTimer);
+			retryTimer = null;
+		}
+		retryCount = 0;
 		if (activeInstance) {
 			try {
 				unmount(activeInstance);
@@ -116,12 +139,14 @@ export function initWhatImDoing(options: WhatImDoingOptions = {}): void {
 	if (swup?.hooks) {
 		swup.hooks.on("page:view", () => {
 			cleanup();
-			setTimeout(tryMount, 50);
+			retryCount = 0;
+			tryMount();
 		});
 	} else {
 		document.addEventListener("swup:contentReplaced", () => {
 			cleanup();
-			setTimeout(tryMount, 50);
+			retryCount = 0;
+			tryMount();
 		});
 	}
 }
