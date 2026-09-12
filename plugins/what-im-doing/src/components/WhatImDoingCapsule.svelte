@@ -55,6 +55,30 @@ let currentTime = $state(Date.now());
 let capsuleEl: HTMLElement | null = $state(null);
 let isMobile = $state(false);
 
+// 刷新状态与防泛洪冷却微胶囊状态机
+type RefreshCapsuleState = "idle" | "refreshing" | "cooldown" | "done";
+let refreshCapsuleState = $state<RefreshCapsuleState>("idle");
+let lastSuccessFetchTime = $state(0);
+let cooldownRemaining = $state(0);
+let cooldownInterval: ReturnType<typeof setInterval> | null = null;
+let cooldownTimeout: ReturnType<typeof setTimeout> | null = null;
+let doneTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function clearRefreshTimers() {
+	if (cooldownInterval) {
+		clearInterval(cooldownInterval);
+		cooldownInterval = null;
+	}
+	if (cooldownTimeout) {
+		clearTimeout(cooldownTimeout);
+		cooldownTimeout = null;
+	}
+	if (doneTimeout) {
+		clearTimeout(doneTimeout);
+		doneTimeout = null;
+	}
+}
+
 // 锚点定位：桌面端上移展开坐标
 let anchorLeft = $state(0);
 let anchorBottom = $state(0);
@@ -164,8 +188,8 @@ const filteredHistory = $derived.by(() => {
 let activeAbortController: AbortController | null = null;
 
 // 单次完整快照抓取：直接获取 current + devices + groups，0 竞态
-async function fetchSnapshot(manual = false) {
-	if (loading && !manual) return;
+async function fetchSnapshot(manual = false): Promise<boolean> {
+	if (loading && !manual) return false;
 	if (manual && activeAbortController) {
 		activeAbortController.abort();
 	}
@@ -176,9 +200,9 @@ async function fetchSnapshot(manual = false) {
 	activeAbortController = controller;
 	const timeoutId = setTimeout(() => controller.abort(), 9000);
 
+	let success = false;
 	try {
 		fetchError = null;
-		let success = false;
 		let lastError: unknown = null;
 
 		for (const targetUrl of candidateEndpoints) {
@@ -234,6 +258,7 @@ async function fetchSnapshot(manual = false) {
 
 		if (success) {
 			currentTime = Date.now();
+			lastSuccessFetchTime = Date.now();
 			fetchError = null;
 		} else if ((lastError as Error)?.name === "AbortError") {
 			fetchError = "连接状态服务器超时，请点击重试";
@@ -255,6 +280,8 @@ async function fetchSnapshot(manual = false) {
 		loading = false;
 		isRefreshing = false;
 	}
+
+	return success;
 }
 
 // 仅在显式配置 refreshInterval > 0 时才启动轮询，默认 0 保持零开销
@@ -296,12 +323,61 @@ function toggleExpand() {
 		if (!data && !loading) {
 			fetchSnapshot();
 		}
+	} else {
+		clearRefreshTimers();
+		refreshCapsuleState = "idle";
 	}
 }
 
-function handleManualRefresh(e: MouseEvent) {
-	e.stopPropagation();
-	fetchSnapshot(true);
+async function handleManualRefresh(e?: MouseEvent) {
+	e?.stopPropagation();
+	if (refreshCapsuleState === "refreshing") return;
+
+	const cooldownPeriod = 5000;
+	const elapsed = Date.now() - lastSuccessFetchTime;
+
+	// 若在成功刷新 5 秒内再次点击，触发防泛洪冷却微胶囊
+	if (lastSuccessFetchTime > 0 && elapsed < cooldownPeriod) {
+		clearRefreshTimers();
+		refreshCapsuleState = "cooldown";
+
+		const updateCooldown = () => {
+			const leftMs = cooldownPeriod - (Date.now() - lastSuccessFetchTime);
+			if (leftMs <= 0) {
+				clearRefreshTimers();
+				refreshCapsuleState = "idle";
+			} else {
+				cooldownRemaining = Math.max(1, Math.ceil(leftMs / 1000));
+			}
+		};
+
+		updateCooldown();
+		cooldownInterval = setInterval(updateCooldown, 200);
+
+		// 倒计时展开 1.8 秒后平滑收起回原始图标
+		const autoCollapseDelay = Math.min(
+			1800,
+			Math.max(800, cooldownPeriod - elapsed),
+		);
+		cooldownTimeout = setTimeout(() => {
+			clearRefreshTimers();
+			refreshCapsuleState = "idle";
+		}, autoCollapseDelay);
+		return;
+	}
+
+	// 正常刷新状态
+	clearRefreshTimers();
+	refreshCapsuleState = "refreshing";
+	const ok = await fetchSnapshot(true);
+	if (ok) {
+		refreshCapsuleState = "done";
+		doneTimeout = setTimeout(() => {
+			refreshCapsuleState = "idle";
+		}, 700);
+	} else {
+		refreshCapsuleState = "idle";
+	}
 }
 
 function portal(node: HTMLElement) {
@@ -362,7 +438,11 @@ onMount(() => {
 	};
 
 	const handleKeydown = (e: KeyboardEvent) => {
-		if (e.key === "Escape" && expanded) expanded = false;
+		if (e.key === "Escape" && expanded) {
+			expanded = false;
+			clearRefreshTimers();
+			refreshCapsuleState = "idle";
+		}
 	};
 
 	window.addEventListener("resize", handleResize);
@@ -370,6 +450,7 @@ onMount(() => {
 
 	return () => {
 		stopPolling();
+		clearRefreshTimers();
 		if (observer) observer.disconnect();
 		window.removeEventListener("resize", handleResize);
 		window.removeEventListener("keydown", handleKeydown);
@@ -480,35 +561,88 @@ onMount(() => {
 				</div>
 
 				<div class="wid-panel__actions">
-					<!-- 手动刷新按钮（按需零开销） -->
+					<!-- 手动刷新动态胶囊按钮 (点击向左展开，带 5 秒防泛洪倒计时) -->
 					<button
 						type="button"
-						class="wid-panel__btn wid-panel__btn--refresh"
+						class="wid-panel__refresh-pill"
+						class:wid-panel__refresh-pill--expanded={refreshCapsuleState !== "idle"}
+						class:wid-panel__refresh-pill--cooldown={refreshCapsuleState === "cooldown"}
+						class:wid-panel__refresh-pill--done={refreshCapsuleState === "done"}
 						onclick={handleManualRefresh}
-						disabled={isRefreshing}
-						aria-label="手动刷新状态"
-						title="手动刷新"
+						disabled={refreshCapsuleState === "refreshing"}
+						aria-label={refreshCapsuleState === "cooldown"
+							? `请等待 ${cooldownRemaining} 秒后刷新`
+							: refreshCapsuleState === "refreshing"
+								? "正在刷新状态..."
+								: refreshCapsuleState === "done"
+									? "已同步"
+									: "手动刷新状态"}
+						title={refreshCapsuleState === "cooldown"
+							? `请等待 ${cooldownRemaining} 秒后刷新`
+							: "手动刷新"}
 					>
-						<svg
-							class="wid-panel__refresh-icon"
-							class:wid-panel__refresh-icon--spin={isRefreshing}
-							viewBox="0 0 24 24"
-							width="15"
-							height="15"
-							aria-hidden="true"
-						>
-							<path
-								fill="currentColor"
-								d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"
-							/>
-						</svg>
+						{#if refreshCapsuleState === "done"}
+							<svg
+								class="wid-panel__refresh-icon"
+								viewBox="0 0 24 24"
+								width="14"
+								height="14"
+								aria-hidden="true"
+							>
+								<path
+									fill="currentColor"
+									d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"
+								/>
+							</svg>
+						{:else if refreshCapsuleState === "cooldown"}
+							<svg
+								class="wid-panel__refresh-icon"
+								viewBox="0 0 24 24"
+								width="14"
+								height="14"
+								aria-hidden="true"
+							>
+								<path
+									fill="currentColor"
+									d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"
+								/>
+							</svg>
+						{:else}
+							<svg
+								class="wid-panel__refresh-icon"
+								class:wid-panel__refresh-icon--spin={refreshCapsuleState === "refreshing"}
+								viewBox="0 0 24 24"
+								width="14"
+								height="14"
+								aria-hidden="true"
+							>
+								<path
+									fill="currentColor"
+									d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"
+								/>
+							</svg>
+						{/if}
+
+						<span class="wid-panel__refresh-label">
+							{#if refreshCapsuleState === "cooldown"}
+								请等待 {cooldownRemaining} 秒刷新
+							{:else if refreshCapsuleState === "refreshing"}
+								正在刷新...
+							{:else if refreshCapsuleState === "done"}
+								已同步
+							{/if}
+						</span>
 					</button>
 
 					<!-- 关闭按钮 -->
 					<button
 						type="button"
 						class="wid-panel__btn wid-panel__btn--close"
-						onclick={() => (expanded = false)}
+						onclick={() => {
+							expanded = false;
+							clearRefreshTimers();
+							refreshCapsuleState = "idle";
+						}}
 						aria-label="关闭详情"
 						title="关闭"
 					>
@@ -530,27 +664,24 @@ onMount(() => {
 							<span class="wid-current-card__device">@{currentActivity.deviceName || currentActivity.name || currentActivity.deviceId}</span>
 						</div>
 
-						{#if currentActivity.media?.title && !isOffline}
+						{#if currentActivity.mediaTitle}
 							<div class="wid-current-card__media">
 								<span class="wid-current-card__media-icon">🎵</span>
-								<span class="wid-current-card__media-text">
-									{currentActivity.media.title}{#if currentActivity.media.artist} — {currentActivity.media.artist}{/if}
-								</span>
+								<span class="wid-current-card__media-text">{currentActivity.mediaTitle}</span>
 							</div>
 						{/if}
 
-						{#if currentActivity.windowTitle && currentActivity.windowTitle !== currentActivity.appName}
-							<div class="wid-current-card__window-title" title={currentActivity.windowTitle}>
-								"{currentActivity.windowTitle}"
+						{#if currentActivity.windowTitle}
+							<div class="wid-current-card__window-title">
+								{currentActivity.windowTitle}
 							</div>
 						{/if}
 
 						<div class="wid-current-card__footer">
-							{#if isOffline}
-								<span class="wid-current-card__last-active">
-									{offlineTimeText || `最后活跃: ${formatRelativeTime(currentActivity.lastSeen ?? currentActivity.timestamp, currentTime, "zh")}`}
-								</span>
-							{:else}
+							<span class="wid-current-card__time">
+								{formatted.prefix}{formatted.action} · {formatDateTime(currentActivity.timestamp, "zh")}
+							</span>
+							{#if !isOffline}
 								<span class="wid-current-card__active-hint">
 									🟢 活跃于 {currentActivity.deviceName || currentActivity.name || currentActivity.deviceId}
 								</span>
@@ -572,7 +703,7 @@ onMount(() => {
 							<button
 								type="button"
 								class="wid-panel__retry-btn"
-								onclick={() => fetchSnapshot(true)}
+								onclick={() => handleManualRefresh()}
 							>
 								点击重试
 							</button>

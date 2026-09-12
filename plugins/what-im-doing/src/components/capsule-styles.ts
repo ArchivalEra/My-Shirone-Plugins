@@ -312,12 +312,101 @@ export const capsuleStyles = `
 	font-size: 0.875rem;
 	font-weight: 600;
 	color: var(--primary, #6750a4);
+	min-width: 0;
+}
+
+.wid-panel__title span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .wid-panel__actions {
 	display: flex;
 	align-items: center;
+	justify-content: flex-end;
 	gap: 0.35rem;
+	flex-shrink: 0;
+}
+
+/* 刷新动态微胶囊 (点击向左平滑展开，收起时为标准圆形按钮) */
+.wid-panel__refresh-pill {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0;
+	height: 28px;
+	min-width: 28px;
+	max-width: 28px;
+	border-radius: 9999px;
+	background: none;
+	border: 1px solid transparent;
+	color: var(--on-surface-variant, #49454f);
+	cursor: pointer;
+	padding: 0 7px;
+	white-space: nowrap;
+	overflow: hidden;
+	transition: max-width 0.32s cubic-bezier(0.2, 0, 0, 1),
+	            background-color 0.2s ease,
+	            border-color 0.2s ease,
+	            color 0.2s ease,
+	            padding 0.25s ease,
+	            gap 0.25s ease;
+	user-select: none;
+	-webkit-tap-highlight-color: transparent;
+	box-sizing: border-box;
+}
+
+.wid-panel__refresh-pill:hover {
+	background: var(--surface-container-high, rgba(0, 0, 0, 0.06));
+	color: var(--on-surface, #1c1b1f);
+}
+
+.wid-panel__refresh-pill:disabled {
+	cursor: default;
+}
+
+.wid-panel__refresh-pill--expanded {
+	max-width: 140px;
+	gap: 0.35rem;
+	padding: 0 10px 0 8px;
+	background: var(--secondary-container, rgba(103, 80, 164, 0.1));
+	border-color: var(--outline-variant, rgba(103, 80, 164, 0.25));
+	color: var(--primary, #6750a4);
+}
+
+.wid-panel__refresh-pill--cooldown {
+	max-width: 175px;
+	gap: 0.35rem;
+	padding: 0 10px 0 8px;
+	background: rgba(245, 158, 11, 0.12);
+	border-color: rgba(245, 158, 11, 0.3);
+	color: #b45309;
+}
+
+.wid-panel__refresh-pill--done {
+	max-width: 95px;
+	gap: 0.35rem;
+	padding: 0 10px 0 8px;
+	background: rgba(16, 185, 129, 0.12);
+	border-color: rgba(16, 185, 129, 0.3);
+	color: #059669;
+}
+
+.wid-panel__refresh-label {
+	font-size: 0.72rem;
+	font-weight: 500;
+	line-height: 1;
+	opacity: 0;
+	transform: translateX(4px);
+	transition: opacity 0.2s ease 0.05s, transform 0.2s ease 0.05s;
+	pointer-events: none;
+	white-space: nowrap;
+}
+
+.wid-panel__refresh-pill--expanded .wid-panel__refresh-label {
+	opacity: 1;
+	transform: translateX(0);
 }
 
 .wid-panel__btn {
