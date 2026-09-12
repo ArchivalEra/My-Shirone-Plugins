@@ -3,16 +3,16 @@ main = "worker.js"
 compatibility_date = "2024-09-01"
 workers_dev = true
 
-# Custom Domain Route
-[[routes]]
-pattern = "api.mango-mesa.ccwu.cc"
-custom_domain = true
+# Optional Custom Domain Route (uncomment and replace with your domain if needed):
+# [[routes]]
+# pattern = "api.example.com"
+# custom_domain = true
 
 # Cloudflare D1 Database Binding
 [[d1_databases]]
 binding = "DB"
 database_name = "what-im-doing-fleet"
-database_id = "39004996-6aa8-47dd-a013-e1d6b477520d"
+database_id = "your-d1-database-id-here"
 
 # Optional Standalone Security:
 # If not using Cloudflare Zero Trust Access for /admin, set a secret via:

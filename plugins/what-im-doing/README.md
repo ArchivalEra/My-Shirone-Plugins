@@ -59,22 +59,24 @@ import whatImDoing from "@shirone-plugins/what-im-doing";
 export default defineConfig({
   integrations: [
     whatImDoing({
-      // Your Worker endpoint, Oracle VPS endpoint, or EdgeOne proxy
-      endpoint: "https://activity.your-domain.com/api/activity",
+      // Primary same-origin reverse proxy with remote hub fallback
+      endpoint: "/api/activity, https://your-hub.workers.dev/api/activity",
       // Maximum history items to show in the dropdown drawer
       maxHistoryDisplay: 5,
-      // Client brief status refresh interval (ms). Default: 30000 (30s)
-      refreshInterval: 30000,
+      // Client brief status refresh interval (ms). 0 = zero idle overhead (manual refresh on demand)
+      refreshInterval: 0,
       // Target selector to place the capsule above (defaults to avatar)
       targetSelector: 'a[aria-label="Go to About Page"]',
-      // Optional: restrict mounting strictly to specific routes (e.g. /about)
-      // routeFilter: ["/about"],
-      // Optional Bearer token for authorized uploads
-      authToken: process.env.ACTIVITY_TOKEN,
+      // Optional: restrict mounting strictly to specific routes (e.g. /about or ["/"] for all)
+      routeFilter: ["/"],
     }),
   ],
 });
 ```
+
+> [!TIP]
+> **🤖 Automated Setup Skill**:
+> An AI agent skill is included in `skills/what-im-doing-setup` (and `.agents/skills/what-im-doing-setup`). It automates `astro.config.mjs` configuration, Cloudflare D1 hub deployment, same-origin reverse proxy setup (Tencent Cloud EdgeOne, Nginx, Caddy), and probe installation.
 
 > [!NOTE]
 > **Zero-Intrusion & Zero-Breaking Contract**:

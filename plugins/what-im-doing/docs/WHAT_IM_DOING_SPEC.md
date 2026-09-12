@@ -43,7 +43,7 @@ flowchart TD
     end
 
     subgraph Frontend["博客前端 (Shirone Theme)"]
-        Blog["🌐 访客打开 /MangoMesa<br/>WhatImDoingCapsule.svelte"]
+        Blog["🌐 访客打开博客页面<br/>WhatImDoingCapsule.svelte"]
     end
 
     D1 -->|HTTPS POST 80字节 PB/JSON| Tunnel
