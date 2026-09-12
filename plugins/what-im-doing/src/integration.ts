@@ -42,10 +42,9 @@ if (typeof window !== "undefined") {
 					: (options.endpoint || "").split(",")[0]?.trim();
 				const isRelativeEndpoint =
 					!primaryEndpoint || primaryEndpoint.startsWith("/");
-				if (
-					options.enableLocalEndpoint === true ||
-					(options.enableLocalEndpoint !== false && isRelativeEndpoint)
-				) {
+				// Only inject on-demand SSR route when explicitly requested
+				// (avoids NoAdapterInstalled error on static output builds)
+				if (options.enableLocalEndpoint === true) {
 					const routePath = new URL("./server/route.js", import.meta.url)
 						.pathname;
 
