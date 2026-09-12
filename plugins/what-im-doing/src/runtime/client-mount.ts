@@ -5,6 +5,7 @@
  */
 
 import { mount, unmount } from "svelte";
+import { injectCapsuleStyles } from "../components/capsule-styles.js";
 import WhatImDoingCapsule from "../components/WhatImDoingCapsule.svelte";
 import type { WhatImDoingOptions } from "../protocol/types.js";
 
@@ -20,6 +21,8 @@ let activeContainer: HTMLElement | null = null;
 
 export function initWhatImDoing(options: WhatImDoingOptions = {}): void {
 	if (typeof window === "undefined" || typeof document === "undefined") return;
+
+	injectCapsuleStyles();
 
 	const config = {
 		endpoint: options.endpoint || "/api/activity",
