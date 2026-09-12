@@ -12,7 +12,7 @@ const CORS_HEADERS = {
 	"Access-Control-Allow-Origin": "*",
 	"Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
 	"Access-Control-Allow-Headers":
-		"Content-Type, Authorization, CF-Access-Client-Id, CF-Access-Client-Secret",
+		"Content-Type, Authorization, Accept, CF-Access-Client-Id, CF-Access-Client-Secret",
 };
 
 function jsonResponse(data, status = 200, extraHeaders = {}) {

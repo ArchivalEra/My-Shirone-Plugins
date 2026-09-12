@@ -63,6 +63,18 @@ export const capsuleStyles = `
 	border-color: var(--outline-variant, rgba(0, 0, 0, 0.1));
 }
 
+.wid-capsule--loading {
+	background: var(--surface-container-low, rgba(0, 0, 0, 0.04));
+	color: var(--on-surface-variant, #49454f);
+	opacity: 0.88;
+}
+
+.wid-capsule--error {
+	background: var(--surface-container-low, rgba(0, 0, 0, 0.04));
+	color: var(--on-surface-variant, #49454f);
+	border-color: var(--outline-variant, rgba(0, 0, 0, 0.1));
+}
+
 /* 状态圆点 (Status Dot) */
 .wid-capsule__dot {
 	width: 7px;
@@ -71,6 +83,12 @@ export const capsuleStyles = `
 	background: #9ca3af;
 	flex-shrink: 0;
 	transition: background-color 0.25s ease;
+}
+
+.wid-capsule__dot--pulse {
+	background: var(--primary, #6750a4) !important;
+	box-shadow: 0 0 6px var(--primary, #6750a4);
+	animation: wid-pulse 1.2s infinite ease-in-out;
 }
 
 .wid-capsule__dot--active {

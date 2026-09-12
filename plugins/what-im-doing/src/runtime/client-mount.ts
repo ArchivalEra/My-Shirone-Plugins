@@ -136,18 +136,24 @@ export function initWhatImDoing(options: WhatImDoingOptions = {}): void {
 			swup?: { hooks?: { on: (event: string, cb: () => void) => void } };
 		}
 	).swup;
+
+	const handleRouteChange = () => {
+		if (!isPathAllowed()) {
+			cleanup();
+		} else {
+			const existing = document.querySelector(".wid-mounted-portal");
+			if (!existing || !activeInstance) {
+				cleanup();
+				retryCount = 0;
+				tryMount();
+			}
+		}
+	};
+
 	if (swup?.hooks) {
-		swup.hooks.on("page:view", () => {
-			cleanup();
-			retryCount = 0;
-			tryMount();
-		});
+		swup.hooks.on("page:view", handleRouteChange);
 	} else {
-		document.addEventListener("swup:contentReplaced", () => {
-			cleanup();
-			retryCount = 0;
-			tryMount();
-		});
+		document.addEventListener("swup:contentReplaced", handleRouteChange);
 	}
 }
 

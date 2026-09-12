@@ -50,8 +50,11 @@ const currentActivity = $derived(data?.current ?? null);
 const devices = $derived(data?.devices ?? []);
 const allHistory = $derived(data?.history ?? []);
 
+const isInitialLoading = $derived(!data && loading);
+const isInitialError = $derived(!data && !loading && Boolean(fetchError));
+
 const isOffline = $derived.by(() => {
-	if (!currentActivity) return true;
+	if (!data || !currentActivity) return false;
 	if (currentActivity.offline) return true;
 	if (currentActivity.status === ActivityStatus.OFFLINE) return true;
 	const ts = currentActivity.lastSeen ?? currentActivity.timestamp;
@@ -145,18 +148,26 @@ const filteredHistory = $derived.by(() => {
 		.slice(0, maxHistoryDisplay);
 });
 
+let activeAbortController: AbortController | null = null;
+
 // 单次完整快照抓取：直接获取 current + devices + groups，0 竞态
 async function fetchSnapshot(manual = false) {
-	if (loading) return;
+	if (loading && !manual) return;
+	if (manual && activeAbortController) {
+		activeAbortController.abort();
+	}
 	loading = true;
 	if (manual) isRefreshing = true;
 
+	const controller = new AbortController();
+	activeAbortController = controller;
+	const timeoutId = setTimeout(() => controller.abort(), 9000);
+
 	try {
 		fetchError = null;
+		// 采用标准 CORS Simple Request 避免移动端（如 Firefox GeckoView）预检拦截
 		const res = await fetch(endpoint, {
-			headers: {
-				Accept: "application/json, application/x-protobuf",
-			},
+			signal: controller.signal,
 		});
 
 		if (!res.ok) {
@@ -173,10 +184,18 @@ async function fetchSnapshot(manual = false) {
 		}
 		currentTime = Date.now();
 		fetchError = null;
-	} catch (err) {
-		fetchError = "无法连接至状态服务器";
+	} catch (err: unknown) {
+		if ((err as Error)?.name === "AbortError") {
+			fetchError = "连接状态服务器超时，请点击重试";
+		} else {
+			fetchError = "无法连接至状态服务器";
+		}
 		console.debug("[what-im-doing] Telemetry fetch paused:", err);
 	} finally {
+		clearTimeout(timeoutId);
+		if (activeAbortController === controller) {
+			activeAbortController = null;
+		}
 		loading = false;
 		isRefreshing = false;
 	}
@@ -306,7 +325,7 @@ onMount(() => {
 	<!-- 经典药丸胶囊：单行高质感，药丸圆角，水平居中于头像上方 -->
 	<button
 		type="button"
-		class={`wid-capsule wid-capsule--${isOffline ? "offline" : formatted.statusType}`}
+		class={`wid-capsule wid-capsule--${isInitialLoading ? "loading" : isInitialError ? "error" : isOffline ? "offline" : formatted.statusType}`}
 		onclick={toggleExpand}
 		aria-expanded={expanded}
 		aria-label="查看我的实时设备与活动历史"
@@ -314,14 +333,21 @@ onMount(() => {
 		<!-- 呼吸状态指示灯 -->
 		<span
 			class="wid-capsule__dot"
-			class:wid-capsule__dot--active={!isOffline && formatted.statusType === 'active'}
-			class:wid-capsule__dot--idle={!isOffline && formatted.statusType === 'idle'}
-			class:wid-capsule__dot--offline={isOffline}
+			class:wid-capsule__dot--pulse={isInitialLoading}
+			class:wid-capsule__dot--active={!isOffline && !isInitialLoading && !isInitialError && formatted.statusType === 'active'}
+			class:wid-capsule__dot--idle={!isOffline && !isInitialLoading && !isInitialError && formatted.statusType === 'idle'}
+			class:wid-capsule__dot--offline={isOffline || isInitialError}
 		></span>
 
 		<!-- 单行活动摘要 (水平药丸排版) -->
 		<span class="wid-capsule__text">
-			{#if isOffline}
+			{#if isInitialLoading}
+				<span class="wid-capsule__prefix">同步中:</span>
+				<strong class="wid-capsule__app">正在连接状态...</strong>
+			{:else if isInitialError}
+				<span class="wid-capsule__prefix">状态:</span>
+				<strong class="wid-capsule__app">点击查看详情</strong>
+			{:else if isOffline}
 				<span class="wid-capsule__prefix">最后使用:</span>
 				<strong class="wid-capsule__app">{currentActivity?.appName || "离线"}</strong>
 				{#if offlineTimeText}
