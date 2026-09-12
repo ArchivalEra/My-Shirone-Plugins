@@ -83,10 +83,10 @@ export interface ActivityHistoryResponse {
  */
 export interface WhatImDoingOptions {
 	/**
-	 * Backend API endpoint URL (e.g. "/api/activity" or "https://activity.example.com/api/activity")
+	 * Backend API endpoint URL (e.g. "/api/activity" or "https://activity.example.com/api/activity", or comma-separated candidates)
 	 * Default: "/api/activity"
 	 */
-	endpoint?: string;
+	endpoint?: string | string[];
 
 	/**
 	 * Maximum number of history events to display in the drawer/popover

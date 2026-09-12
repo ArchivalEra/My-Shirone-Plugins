@@ -26,11 +26,24 @@ let {
 	refreshInterval = 0,
 	class: className = "",
 }: {
-	endpoint?: string;
+	endpoint?: string | string[];
 	maxHistoryDisplay?: number;
 	refreshInterval?: number;
 	class?: string;
 } = $props();
+
+const candidateEndpoints = $derived.by(() => {
+	if (Array.isArray(endpoint)) {
+		return endpoint.map((e) => e.trim()).filter(Boolean);
+	}
+	if (typeof endpoint === "string") {
+		return endpoint
+			.split(",")
+			.map((e) => e.trim())
+			.filter(Boolean);
+	}
+	return ["/api/activity"];
+});
 
 let data = $state<ActivityHistoryResponse | null>(null);
 let loading = $state(false);
@@ -165,25 +178,68 @@ async function fetchSnapshot(manual = false) {
 
 	try {
 		fetchError = null;
-		// 采用标准 CORS Simple Request 避免移动端（如 Firefox GeckoView）预检拦截
-		const res = await fetch(endpoint, {
-			signal: controller.signal,
-		});
+		let success = false;
+		let lastError: unknown = null;
 
-		if (!res.ok) {
-			fetchError = `状态服务响应异常 (${res.status})`;
-			return;
+		for (const targetUrl of candidateEndpoints) {
+			if (controller.signal.aborted) break;
+			try {
+				// 采用标准 CORS Simple Request 避免移动端（如 Firefox GeckoView）预检拦截
+				const res = await fetch(targetUrl, {
+					signal: controller.signal,
+				});
+
+				if (!res.ok) {
+					lastError = new Error(`HTTP ${res.status}`);
+					continue;
+				}
+
+				const contentType = res.headers.get("content-type") ?? "";
+				if (contentType.includes("application/x-protobuf")) {
+					const buffer = await res.arrayBuffer();
+					data = decodeHistoryResponse(new Uint8Array(buffer));
+					success = true;
+					break;
+				} else if (
+					contentType.includes("application/json") ||
+					contentType.includes("text/plain")
+				) {
+					const text = await res.text();
+					try {
+						const parsed = JSON.parse(text) as ActivityHistoryResponse;
+						if (
+							parsed &&
+							(parsed.current !== undefined ||
+								parsed.devices !== undefined ||
+								parsed.serverTime !== undefined)
+						) {
+							data = parsed;
+							success = true;
+							break;
+						}
+					} catch {
+						// 静态 SPA 兜底等非 JSON 页面，尝试下一个端点
+						continue;
+					}
+				}
+			} catch (err: unknown) {
+				if ((err as Error)?.name === "AbortError") {
+					lastError = err;
+					break;
+				}
+				lastError = err;
+				continue;
+			}
 		}
 
-		const contentType = res.headers.get("content-type") ?? "";
-		if (contentType.includes("application/x-protobuf")) {
-			const buffer = await res.arrayBuffer();
-			data = decodeHistoryResponse(new Uint8Array(buffer));
+		if (success) {
+			currentTime = Date.now();
+			fetchError = null;
+		} else if ((lastError as Error)?.name === "AbortError") {
+			fetchError = "连接状态服务器超时，请点击重试";
 		} else {
-			data = (await res.json()) as ActivityHistoryResponse;
+			fetchError = "无法连接至状态服务器";
 		}
-		currentTime = Date.now();
-		fetchError = null;
 	} catch (err: unknown) {
 		if ((err as Error)?.name === "AbortError") {
 			fetchError = "连接状态服务器超时，请点击重试";

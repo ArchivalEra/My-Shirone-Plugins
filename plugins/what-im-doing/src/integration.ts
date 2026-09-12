@@ -37,8 +37,11 @@ if (typeof window !== "undefined") {
 				);
 
 				// Optional local dev API route injection
+				const primaryEndpoint = Array.isArray(options.endpoint)
+					? options.endpoint[0]
+					: (options.endpoint || "").split(",")[0]?.trim();
 				const isRelativeEndpoint =
-					!options.endpoint || options.endpoint.startsWith("/");
+					!primaryEndpoint || primaryEndpoint.startsWith("/");
 				if (
 					options.enableLocalEndpoint === true ||
 					(options.enableLocalEndpoint !== false && isRelativeEndpoint)
@@ -48,7 +51,7 @@ if (typeof window !== "undefined") {
 
 					injectRoute({
 						pattern: isRelativeEndpoint
-							? options.endpoint || "/api/activity"
+							? primaryEndpoint || "/api/activity"
 							: "/api/activity",
 						entrypoint: routePath,
 					});
