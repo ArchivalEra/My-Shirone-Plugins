@@ -74,63 +74,41 @@ elif command -v qdbus &>/dev/null; then
     DBUS_CMD="qdbus"
 fi
 
-get_active_app_and_title() {
-    local app=""
-    local title=""
+get_active_process() {
+    local proc=""
 
-    # Strategy 1: kdotool on KDE Wayland
+    # Strategy 1: kdotool (Wayland/X11 helper if installed)
     if command -v kdotool &>/dev/null; then
         local wid
         wid=$(kdotool getactivewindow 2>/dev/null || true)
         if [[ -n "$wid" ]]; then
-            title=$(kdotool getwindowname "$wid" 2>/dev/null || true)
-            app=$(kdotool getwindowclassname "$wid" 2>/dev/null || true)
+            proc=$(kdotool getwindowclassname "$wid" 2>/dev/null || true)
         fi
     fi
 
-    # Strategy 2: KDE 6 KWin Scripting via D-Bus (sub-50ms)
-    if [[ -z "$app" && -n "$DBUS_CMD" ]]; then
+    # Strategy 2: KDE 6 KWin Scripting via D-Bus (resourceClass)
+    if [[ -z "$proc" && -n "$DBUS_CMD" ]]; then
         local tmp_script="/tmp/wid_kwin_$$.js"
-        echo 'if (workspace.activeWindow) { print("WID_WIN:" + (workspace.activeWindow.resourceClass || "") + ":::" + (workspace.activeWindow.caption || "")); } else { print("WID_WIN:::Desktop"); }' > "$tmp_script"
+        echo 'if (workspace.activeWindow) { print("WID_PROC:" + (workspace.activeWindow.resourceClass || "")); } else { print("WID_PROC:desktop"); }' > "$tmp_script"
         local plugin_name="wid_active_$$"
         $DBUS_CMD org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript "$tmp_script" "$plugin_name" >/dev/null 2>&1 || true
         $DBUS_CMD org.kde.KWin /Scripting org.kde.kwin.Scripting.start >/dev/null 2>&1 || true
         $DBUS_CMD org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript "$plugin_name" >/dev/null 2>&1 || true
         rm -f "$tmp_script"
 
-        local raw_win
-        raw_win=$(journalctl --user -u plasma-kwin_wayland -n 15 --no-pager 2>/dev/null | grep -a "WID_WIN:" | tail -n 1 | sed 's/.*WID_WIN://' || true)
-        if [[ -n "$raw_win" ]]; then
-            app="${raw_win%%:::*}"
-            title="${raw_win##*:::}"
-        fi
+        proc=$(journalctl --user -u plasma-kwin_wayland -n 15 --no-pager 2>/dev/null | grep -a "WID_PROC:" | tail -n 1 | sed 's/.*WID_PROC://' | tr -d '\r\n' || true)
     fi
 
-    # Strategy 3: Foreground process fallback
-    if [[ -z "$app" ]]; then
-        app=$(ps -u "$USER" -o comm= --sort=-%cpu 2>/dev/null | grep -vE 'ps|grep|qdbus|qdbus6|sh|bash|zsh|systemd|kdotool|curl' | head -n 1 || echo "Desktop")
-        title="${app} (Foreground)"
+    # Strategy 3: Foreground top process fallback
+    if [[ -z "$proc" ]]; then
+        proc=$(ps -u "$USER" -o comm= --sort=-%cpu 2>/dev/null | grep -vE 'ps|grep|qdbus|qdbus6|sh|bash|zsh|systemd|kdotool|curl' | head -n 1 || echo "desktop")
     fi
 
-    # Formatting clean app names
-    case "${app,,}" in
-        *zcode*)                              app="ZCode" ;;
-        *antigravity*)                        app="Antigravity" ;;
-        *google-chrome*|*chrome*|*chromium*) app="Google Chrome" ;;
-        *firefox*)                            app="Firefox" ;;
-        *code*|*vscode*)                      app="Visual Studio Code" ;;
-        *cursor*)                             app="Cursor" ;;
-        *alacritty*|*kitty*|*konsole*)        app="Terminal" ;;
-        *dolphin*)                            app="Dolphin" ;;
-        *zen*)                                app="Zen Browser" ;;
-        *obsidian*)                           app="Obsidian" ;;
-        *telegram*)                           app="Telegram" ;;
-        *discord*)                            app="Discord" ;;
-        *wechat*)                             app="WeChat" ;;
-        "")                                   app="Desktop"; title="Desktop" ;;
-    esac
+    # Strip any invalid characters, fallback to desktop if empty
+    proc=$(echo "$proc" | tr -cd 'a-zA-Z0-9_.-')
+    [[ -z "$proc" ]] && proc="desktop"
 
-    echo "${app}:::${title}"
+    echo "$proc"
 }
 
 get_idle_seconds() {
@@ -166,10 +144,8 @@ get_media_info() {
 }
 
 send_activity() {
-    local raw_info
-    raw_info=$(get_active_app_and_title)
-    local app="${raw_info%%:::*}"
-    local title="${raw_info##*:::}"
+    local proc
+    proc=$(get_active_process)
 
     local idle
     idle=$(get_idle_seconds)
@@ -191,8 +167,8 @@ send_activity() {
     local now_ms
     now_ms=$(( now_sec * 1000 ))
 
-    # 3. State Diffing & Heartbeat Suppression
-    local current_state_key="${app}:::${title}:::${status}:::${media_title}"
+    # 3. State Diffing & Heartbeat Suppression (keyed by process + status + media)
+    local current_state_key="${proc}:::${status}:::${media_title}"
     local last_state_key=""
     local last_sent_sec=0
 
@@ -215,10 +191,8 @@ send_activity() {
     fi
 
     # Escape JSON strings safely
-    local safe_title
-    safe_title=$(printf '%s' "$title" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/ /g')
-    local safe_app
-    safe_app=$(printf '%s' "$app" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    local safe_proc
+    safe_proc=$(printf '%s' "$proc" | sed 's/\\/\\\\/g; s/"/\\"/g')
     local safe_name
     safe_name=$(printf '%s' "$DEVICE_NAME" | sed 's/\\/\\\\/g; s/"/\\"/g')
     local safe_media_title
@@ -235,8 +209,8 @@ send_activity() {
   "name": "${safe_name}",
   "type": "${DEVICE_TYPE}",
   "status": ${status},
-  "appName": "${safe_app}",
-  "windowTitle": "${safe_title}",
+  "appName": "${safe_proc}",
+  "windowTitle": "",
   "idleSeconds": ${idle},
   "osInfo": "${os_info}",
   "mediaTitle": "${safe_media_title}",

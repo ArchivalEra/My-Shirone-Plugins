@@ -105,6 +105,17 @@ const offlineTimeText = $derived.by(() => {
 	return formatOfflineTime(ts, currentTime, "zh");
 });
 
+const effectiveDeviceName = $derived.by(() => {
+	if (!currentActivity) return "";
+	return (
+		currentActivity.deviceName ||
+		currentActivity.name ||
+		currentActivity.deviceId ||
+		currentActivity.id ||
+		""
+	);
+});
+
 const formatted = $derived(
 	formatActivitySentence(currentActivity, currentTime, "zh"),
 );
@@ -485,24 +496,27 @@ onMount(() => {
 				<span class="wid-capsule__prefix">状态:</span>
 				<strong class="wid-capsule__app">点击查看详情</strong>
 			{:else if isOffline}
-				<span class="wid-capsule__prefix">最后使用:</span>
-				<strong class="wid-capsule__app">{currentActivity?.appName || "离线"}</strong>
+				<span class="wid-capsule__prefix">离线</span>
 				{#if offlineTimeText}
 					<span class="wid-capsule__sep">·</span>
 					<span class="wid-capsule__title">{offlineTimeText}</span>
 				{/if}
+				{#if effectiveDeviceName}
+					<span class="wid-capsule__at">@</span>
+					<span class="wid-capsule__device">{effectiveDeviceName}</span>
+				{/if}
 			{:else if currentActivity?.media?.title}
 				<span class="wid-capsule__media-icon">🎵</span>
 				<strong class="wid-capsule__app">{currentActivity.media.title}</strong>
-				{#if currentActivity.media.artist}
-					<span class="wid-capsule__sep">·</span>
-					<span class="wid-capsule__title">{currentActivity.media.artist}</span>
+				{#if effectiveDeviceName}
+					<span class="wid-capsule__at">@</span>
+					<span class="wid-capsule__device">{effectiveDeviceName}</span>
 				{/if}
 			{:else if currentActivity?.appName}
 				<strong class="wid-capsule__app">{currentActivity.appName}</strong>
-				{#if currentActivity.windowTitle && currentActivity.windowTitle !== currentActivity.appName}
-					<span class="wid-capsule__sep">·</span>
-					<span class="wid-capsule__title">{currentActivity.windowTitle}</span>
+				{#if effectiveDeviceName}
+					<span class="wid-capsule__at">@</span>
+					<span class="wid-capsule__device">{effectiveDeviceName}</span>
 				{/if}
 			{:else}
 				<span>{statusLabel}</span>
@@ -660,8 +674,10 @@ onMount(() => {
 							<span class="wid-tag" class:wid-tag--primary={!isOffline} class:wid-tag--muted={isOffline}>
 								{isOffline ? "最后使用" : "当前活跃"}
 							</span>
-							<strong class="wid-current-card__appname">{currentActivity.appName || "未知应用"}</strong>
-							<span class="wid-current-card__device">@{currentActivity.deviceName || currentActivity.name || currentActivity.deviceId}</span>
+							<strong class="wid-current-card__appname">{currentActivity.appName || "idle"}</strong>
+							{#if effectiveDeviceName}
+								<span class="wid-current-card__device">@{effectiveDeviceName}</span>
+							{/if}
 						</div>
 
 						{#if currentActivity.mediaTitle}
@@ -671,21 +687,10 @@ onMount(() => {
 							</div>
 						{/if}
 
-						{#if currentActivity.windowTitle}
-							<div class="wid-current-card__window-title">
-								{currentActivity.windowTitle}
-							</div>
-						{/if}
-
 						<div class="wid-current-card__footer">
 							<span class="wid-current-card__time">
-								{formatted.prefix}{formatted.action} · {formatDateTime(currentActivity.timestamp, "zh")}
+								活跃于 {formatRelativeTime(currentActivity.lastSeen ?? currentActivity.timestamp, currentTime, "zh")} · {formatDateTime(currentActivity.lastSeen ?? currentActivity.timestamp, "zh")}
 							</span>
-							{#if !isOffline}
-								<span class="wid-current-card__active-hint">
-									🟢 活跃于 {currentActivity.deviceName || currentActivity.name || currentActivity.deviceId}
-								</span>
-							{/if}
 							{#if currentActivity.osInfo}
 								<span class="wid-current-card__os-info">{currentActivity.osInfo}</span>
 							{/if}
@@ -759,10 +764,6 @@ onMount(() => {
 													<div class="wid-device-card__app">
 														<span class="wid-device-card__muted-label">最后使用:</span>
 														<span class="wid-device-card__app-title">{dev.appName || "无记录"}</span>
-														{#if dev.windowTitle && dev.windowTitle !== dev.appName}
-															<span class="wid-device-card__sep">·</span>
-															<span class="wid-device-card__win-title" title={dev.windowTitle}>{dev.windowTitle}</span>
-														{/if}
 													</div>
 													<div class="wid-device-card__time">
 														最后活跃: {formatRelativeTime(dev.lastSeen ?? dev.timestamp, currentTime, "zh")}
@@ -773,10 +774,6 @@ onMount(() => {
 												{:else}
 													<div class="wid-device-card__app">
 														<span class="wid-device-card__app-title">{dev.appName || "活动中"}</span>
-														{#if dev.windowTitle && dev.windowTitle !== dev.appName}
-															<span class="wid-device-card__sep">·</span>
-															<span class="wid-device-card__win-title" title={dev.windowTitle}>{dev.windowTitle}</span>
-														{/if}
 													</div>
 													<div class="wid-device-card__time">
 														{#if dev.status === ActivityStatus.IDLE && dev.idleSeconds && dev.idleSeconds > 60}
@@ -805,16 +802,13 @@ onMount(() => {
 									<div class="wid-timeline__dot"></div>
 									<div class="wid-timeline__content">
 										<div class="wid-timeline__row">
-											<span class="wid-timeline__app">{item.appName}</span>
+											<span class="wid-timeline__app">
+												{item.appName}
+												{#if item.deviceName || item.name}
+													@{item.deviceName || item.name}
+												{/if}
+											</span>
 											<span class="wid-timeline__time">{formatRelativeTime(item.timestamp, currentTime, "zh")}</span>
-										</div>
-										{#if item.windowTitle && item.windowTitle !== item.appName}
-											<div class="wid-timeline__title" title={item.windowTitle}>
-												{item.windowTitle}
-											</div>
-										{/if}
-										<div class="wid-timeline__device">
-											{item.deviceName || item.name}
 										</div>
 									</div>
 								</li>

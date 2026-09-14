@@ -161,6 +161,21 @@ export const capsuleStyles = `
 	font-weight: 400;
 }
 
+.wid-capsule__at {
+	opacity: 0.55;
+	font-weight: 400;
+	margin: 0 1px;
+	flex-shrink: 0;
+}
+
+.wid-capsule__device {
+	opacity: 0.85;
+	font-weight: 500;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .wid-capsule__media-icon {
 	flex-shrink: 0;
 	font-size: 0.75rem;
