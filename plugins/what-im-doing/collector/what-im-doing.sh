@@ -59,9 +59,11 @@ if [[ -n "$CONF_FILE" ]]; then
     [[ -n "$cfg_type" ]] && DEVICE_TYPE="$cfg_type"
     [[ -n "$cfg_cid" ]] && CF_CLIENT_ID="$cfg_cid"
     [[ -n "$cfg_csec" ]] && CF_CLIENT_SECRET="$cfg_csec"
+    STATE_FILE="/tmp/wid_state_${USER}_${DEVICE_ID}"
 elif [[ -f "$USER_SH_CONF" ]]; then
     # shellcheck disable=SC1090
     source "$USER_SH_CONF"
+    STATE_FILE="/tmp/wid_state_${USER}_${DEVICE_ID}"
 fi
 
 # Detect available D-Bus CLI for KDE 6 / Qt 6
