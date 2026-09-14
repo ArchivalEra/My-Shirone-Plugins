@@ -25,8 +25,8 @@ export const capsuleStyles = `
 	display: inline-flex;
 	align-items: center;
 	gap: 0.45rem;
-	height: 32px;
-	padding: 0 0.85rem;
+	min-height: 34px;
+	padding: 0.25rem 0.85rem;
 	border-radius: 9999px !important;
 	background: var(--surface-container-high, color-mix(in oklab, var(--primary, #6750a4) 10%, var(--card-bg, #ffffff)));
 	color: var(--on-surface, #1c1b1f);
@@ -116,35 +116,32 @@ export const capsuleStyles = `
 	}
 }
 
-/* 胶囊文本区域 (单行截断，高质感) */
+/* 胶囊文本区域 (单行截断，高质感，防止下伸笔画被截断) */
 .wid-capsule__text {
 	display: inline-flex;
-	align-items: center;
+	align-items: baseline;
 	gap: 0.25rem;
 	overflow: hidden;
 	white-space: nowrap;
 	text-overflow: ellipsis;
 	flex: 1 1 auto;
 	min-width: 0;
-	line-height: 1.4;
-	padding: 2px 0;
+	line-height: 1.6;
+	padding-top: 2px;
+	padding-bottom: 5px;
 }
 
 .wid-capsule__prefix {
 	opacity: 0.72;
 	font-weight: 400;
 	flex-shrink: 0;
-	line-height: 1.4;
+	line-height: inherit;
 }
 
 .wid-capsule__app {
 	font-weight: 600;
 	color: var(--primary, #6750a4);
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	line-height: 1.4;
-	padding-bottom: 2px;
+	line-height: inherit;
 }
 
 .wid-capsule--offline .wid-capsule__app {
