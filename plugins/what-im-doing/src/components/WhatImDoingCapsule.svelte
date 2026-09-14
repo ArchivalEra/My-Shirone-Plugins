@@ -12,6 +12,7 @@ import {
 } from "../protocol/types.js";
 import { injectCapsuleStyles } from "./capsule-styles.js";
 import {
+	capitalizeFirstLetter,
 	formatActivitySentence,
 	formatDateTime,
 	formatOfflineTime,
@@ -115,6 +116,10 @@ const effectiveDeviceName = $derived.by(() => {
 		""
 	);
 });
+
+const displayAppName = $derived(
+	capitalizeFirstLetter(currentActivity?.appName || ""),
+);
 
 const formatted = $derived(
 	formatActivitySentence(currentActivity, currentTime, "zh"),
@@ -501,23 +506,13 @@ onMount(() => {
 					<span class="wid-capsule__sep">·</span>
 					<span class="wid-capsule__title">{offlineTimeText}</span>
 				{/if}
-				{#if effectiveDeviceName}
-					<span class="wid-capsule__at">@</span>
-					<span class="wid-capsule__device">{effectiveDeviceName}</span>
-				{/if}
 			{:else if currentActivity?.media?.title}
 				<span class="wid-capsule__media-icon">🎵</span>
+				<span class="wid-capsule__prefix">正在</span>
 				<strong class="wid-capsule__app">{currentActivity.media.title}</strong>
-				{#if effectiveDeviceName}
-					<span class="wid-capsule__at">@</span>
-					<span class="wid-capsule__device">{effectiveDeviceName}</span>
-				{/if}
 			{:else if currentActivity?.appName}
-				<strong class="wid-capsule__app">{currentActivity.appName}</strong>
-				{#if effectiveDeviceName}
-					<span class="wid-capsule__at">@</span>
-					<span class="wid-capsule__device">{effectiveDeviceName}</span>
-				{/if}
+				<span class="wid-capsule__prefix">正在</span>
+				<strong class="wid-capsule__app">{displayAppName}</strong>
 			{:else}
 				<span>{statusLabel}</span>
 			{/if}

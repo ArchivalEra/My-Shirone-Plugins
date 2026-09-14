@@ -126,13 +126,15 @@ export const capsuleStyles = `
 	text-overflow: ellipsis;
 	flex: 1 1 auto;
 	min-width: 0;
-	line-height: 1;
+	line-height: 1.4;
+	padding: 2px 0;
 }
 
 .wid-capsule__prefix {
 	opacity: 0.72;
 	font-weight: 400;
 	flex-shrink: 0;
+	line-height: 1.4;
 }
 
 .wid-capsule__app {
@@ -141,6 +143,8 @@ export const capsuleStyles = `
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+	line-height: 1.4;
+	padding-bottom: 2px;
 }
 
 .wid-capsule--offline .wid-capsule__app {

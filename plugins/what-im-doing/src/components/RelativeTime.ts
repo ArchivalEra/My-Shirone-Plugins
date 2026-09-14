@@ -1,6 +1,18 @@
 import { ActivityStatus, type DeviceActivity } from "../protocol/types.js";
 
 /**
+ * Capitalizes the first character if it is a letter.
+ */
+export function capitalizeFirstLetter(str: string): string {
+	if (!str) return "";
+	const first = str.charAt(0);
+	if (first >= "a" && first <= "z") {
+		return first.toUpperCase() + str.slice(1);
+	}
+	return str;
+}
+
+/**
  * Formats a timestamp into a human-friendly relative time string in Chinese or English.
  */
 export function formatRelativeTime(

@@ -108,6 +108,9 @@ get_active_process() {
     proc=$(echo "$proc" | tr -cd 'a-zA-Z0-9_.-')
     [[ -z "$proc" ]] && proc="desktop"
 
+    # Capitalize first character if letter
+    proc="${proc^}"
+
     echo "$proc"
 }
 

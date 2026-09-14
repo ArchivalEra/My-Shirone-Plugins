@@ -1,12 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+	capitalizeFirstLetter,
 	formatActivitySentence,
 	formatDateTime,
 	formatOfflineTime,
 	formatRelativeTime,
 } from "../dist/components/RelativeTime.js";
 import { ActivityStatus } from "../dist/protocol/types.js";
+
+test("RelativeTime - capitalizeFirstLetter capitalizes lowercase letters", () => {
+	assert.equal(capitalizeFirstLetter("antigravity"), "Antigravity");
+	assert.equal(capitalizeFirstLetter("zcode"), "Zcode");
+	assert.equal(capitalizeFirstLetter("code"), "Code");
+	assert.equal(capitalizeFirstLetter("Firefox"), "Firefox");
+	assert.equal(capitalizeFirstLetter("123test"), "123test");
+	assert.equal(capitalizeFirstLetter(""), "");
+});
 
 test("RelativeTime - formatRelativeTime formatting", () => {
 	const now = 1773190000000;
