@@ -43,6 +43,12 @@ export interface DynamicSvgOptions {
 	className?: string;
 
 	/**
+	 * Optional HTML/SVG-to-HAST parser function (e.g. from `hast-util-from-html`).
+	 * If omitted, dynamic-svg uses its built-in zero-dependency SVG parser.
+	 */
+	fromHtml?: (html: string, options?: any) => any;
+
+	/**
 	 * Optional Pretext linkage configuration for zero-reflow text measurement inside SVGs.
 	 */
 	pretext?: DynamicSvgPretextConfig;

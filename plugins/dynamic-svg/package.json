@@ -37,10 +37,7 @@
       "optional": true
     }
   },
-  "dependencies": {
-    "hast-util-from-html": "^2.0.3",
-    "unist-util-visit": "^5.1.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "^5.8.0"

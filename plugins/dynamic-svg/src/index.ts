@@ -2,8 +2,6 @@
 import fs from "node:fs";
 // @ts-ignore
 import path from "node:path";
-import { fromHtml } from "hast-util-from-html";
-import { visit } from "unist-util-visit";
 
 declare const process: any;
 declare const Intl: any;
@@ -88,23 +86,165 @@ export function resolveSvgPath(
 }
 
 /**
+ * Lightweight XML/SVG parser producing compliant HAST element trees with zero external dependencies.
+ */
+export function parseSvgToHast(svgStr: string): any {
+	const clean = svgStr
+		.replace(/<\?xml[\s\S]*?\?>/i, "")
+		.replace(/<!DOCTYPE[\s\S]*?>/i, "")
+		.trim();
+
+	const tagRegex =
+		/<(\/)?([a-zA-Z0-9\-_:]+)((?:\s+[a-zA-Z0-9\-_:@]+(?:=(?:"[^"]*"|'[^']*'|[^\s"'>]+))?)*)\s*(\/?)>|<!--[\s\S]*?-->|([^<]+)/g;
+	const attrRegex =
+		/([a-zA-Z0-9\-_:@]+)(?:=(?:"([^"]*)"|'([^']*)'|([^\s"'>]+)))?/g;
+
+	const root: any = { type: "root", children: [] };
+	const stack: any[] = [root];
+
+	let match: RegExpExecArray | null;
+	while ((match = tagRegex.exec(clean)) !== null) {
+		const [fullMatch, isClosing, tagName, attrStr, isSelfClosing, textContent] =
+			match;
+
+		if (textContent !== undefined) {
+			const text = textContent;
+			if (text.trim() || stack.length > 1) {
+				const current = stack[stack.length - 1];
+				current.children.push({ type: "text", value: text });
+			}
+			continue;
+		}
+
+		if (fullMatch.startsWith("<!--")) {
+			continue;
+		}
+
+		if (isClosing) {
+			if (
+				stack.length > 1 &&
+				stack[stack.length - 1].tagName.toLowerCase() ===
+					tagName.toLowerCase()
+			) {
+				stack.pop();
+			}
+			continue;
+		}
+
+		const properties: Record<string, any> = {};
+		if (attrStr) {
+			let attrMatch: RegExpExecArray | null;
+			while ((attrMatch = attrRegex.exec(attrStr)) !== null) {
+				const key = attrMatch[1];
+				const value =
+					attrMatch[2] ?? attrMatch[3] ?? attrMatch[4] ?? true;
+				if (key === "class") {
+					properties.className =
+						typeof value === "string"
+							? value.split(/\s+/).filter(Boolean)
+							: [];
+				} else {
+					properties[key] = value;
+				}
+			}
+		}
+
+		const element: any = {
+			type: "element",
+			tagName: tagName.toLowerCase() === "svg" ? "svg" : tagName,
+			properties,
+			children: [],
+		};
+
+		const current = stack[stack.length - 1];
+		current.children.push(element);
+
+		const isSelf =
+			isSelfClosing === "/" ||
+			([
+				"stop",
+				"path",
+				"circle",
+				"rect",
+				"line",
+				"polyline",
+				"polygon",
+				"ellipse",
+				"use",
+				"image",
+			].includes(tagName.toLowerCase()) &&
+				isSelfClosing === "/");
+
+		if (!isSelf && isSelfClosing !== "/") {
+			stack.push(element);
+		}
+	}
+
+	return root;
+}
+
+/**
+ * Traverses all HAST elements without external dependencies.
+ */
+function walkElement(
+	node: any,
+	visitor: (node: any, index: number, parent: any) => void,
+	parent?: any,
+	index = 0,
+): void {
+	if (!node || typeof node !== "object") return;
+	if (node.type === "element" && parent) {
+		visitor(node, index, parent);
+	}
+	if (Array.isArray(node.children)) {
+		for (let i = 0; i < node.children.length; i++) {
+			walkElement(node.children[i], visitor, node, i);
+		}
+	}
+}
+
+/**
+ * Walks all element nodes in a subtree.
+ */
+function walkAllElements(node: any, visitor: (node: any) => void): void {
+	if (!node || typeof node !== "object") return;
+	if (node.type === "element") {
+		visitor(node);
+	}
+	if (Array.isArray(node.children)) {
+		for (const child of node.children) {
+			walkAllElements(child, visitor);
+		}
+	}
+}
+
+/**
  * Optional Pretext arithmetic layout for SVG text nodes marked with data-pretext.
  * When enabled, converts plain text into arithmetic <tspan> elements without DOM reflow.
  */
-function applyPretextLayout(svgNode: any, pretextConfig: DynamicSvgPretextConfig | undefined) {
+function applyPretextLayout(
+	svgNode: any,
+	pretextConfig: DynamicSvgPretextConfig | undefined,
+) {
 	if (!pretextConfig?.enabled || !svgNode) return;
 
-	visit(svgNode, "element", (node: any) => {
+	walkAllElements(svgNode, (node: any) => {
 		if (node.tagName !== "text") return;
 		const props = node.properties || {};
 		const hasPretext = "dataPretext" in props || "data-pretext" in props;
-		const maxWidthRaw = props["dataPretextMaxWidth"] || props["data-pretext-max-width"];
+		const maxWidthRaw =
+			props["dataPretextMaxWidth"] || props["data-pretext-max-width"];
 
 		if (!hasPretext && !maxWidthRaw) return;
 
 		const maxWidth = Number.parseFloat(maxWidthRaw) || 300;
-		const lineHeight = Number.parseFloat(props["dataPretextLineHeight"] || props["data-line-height"]) || 24;
-		const font = String(props["dataPretextFont"] || props["font-family"] || "sans-serif");
+		const lineHeight =
+			Number.parseFloat(
+				props["dataPretextLineHeight"] || props["data-line-height"],
+			) || 24;
+		const font = String(
+			props["dataPretextFont"] || props["font-family"] || "sans-serif",
+		);
 
 		// Extract text content
 		const textContent = (node.children || [])
@@ -116,12 +256,21 @@ function applyPretextLayout(svgNode: any, pretextConfig: DynamicSvgPretextConfig
 
 		let layout: PretextLayoutResult;
 		if (typeof pretextConfig.measurer === "function") {
-			layout = pretextConfig.measurer(textContent, { font, maxWidth, lineHeight });
+			layout = pretextConfig.measurer(textContent, {
+				font,
+				maxWidth,
+				lineHeight,
+			});
 		} else {
 			// Arithmetic CJK/Latin tokenization fallback (Intl.Segmenter based)
-			const words = typeof Intl !== "undefined" && (Intl as any).Segmenter
-				? [...new (Intl as any).Segmenter(undefined, { granularity: "word" }).segment(textContent)].map((s: any) => s.segment)
-				: textContent.split(/\s+/);
+			const words =
+				typeof Intl !== "undefined" && (Intl as any).Segmenter
+					? [
+							...new (Intl as any).Segmenter(undefined, {
+								granularity: "word",
+							}).segment(textContent),
+						].map((s: any) => s.segment)
+					: textContent.split(/\s+/);
 
 			const lines: string[] = [];
 			let currentLine = "";
@@ -129,7 +278,10 @@ function applyPretextLayout(svgNode: any, pretextConfig: DynamicSvgPretextConfig
 
 			for (const word of words) {
 				const testLine = currentLine ? `${currentLine}${word}` : word;
-				if (testLine.length * approxCharWidth > maxWidth && currentLine) {
+				if (
+					testLine.length * approxCharWidth > maxWidth &&
+					currentLine
+				) {
 					lines.push(currentLine);
 					currentLine = word;
 				} else {
@@ -163,10 +315,12 @@ function applyPretextLayout(svgNode: any, pretextConfig: DynamicSvgPretextConfig
  * Unified Rehype plugin to inline SVGs marked with #dynamic with Material 3 tokens.
  */
 export function rehypeDynamicSvg(options: DynamicSvgOptions = {}) {
+	const parseFn = options.fromHtml || parseSvgToHast;
+
 	return (tree: any, file: any) => {
 		const filePath = file?.history?.[0] || file?.path;
 
-		visit(tree, "element", (node: any, index: any, parent: any) => {
+		walkElement(tree, (node: any, index: number, parent: any) => {
 			if (node.tagName !== "img" || !parent || typeof index !== "number") {
 				return;
 			}
@@ -186,9 +340,10 @@ export function rehypeDynamicSvg(options: DynamicSvgOptions = {}) {
 
 			try {
 				const rawSvg = fs.readFileSync(resolvedPath, "utf-8");
-				const parsed = fromHtml(rawSvg, { fragment: true });
+				const parsed = parseFn(rawSvg, { fragment: true });
 				const svgElement = parsed.children.find(
-					(child: any) => child.type === "element" && child.tagName === "svg",
+					(child: any) =>
+						child.type === "element" && child.tagName === "svg",
 				);
 
 				if (!svgElement) return;
@@ -199,7 +354,11 @@ export function rehypeDynamicSvg(options: DynamicSvgOptions = {}) {
 
 				// Preserve or set accessible description
 				const altText = originalProps.alt;
-				if (altText && !svgProps["aria-label"] && !svgProps["ariaLabel"]) {
+				if (
+					altText &&
+					!svgProps["aria-label"] &&
+					!svgProps["ariaLabel"]
+				) {
 					svgProps["aria-label"] = String(altText);
 				}
 				svgProps.role = "img";
@@ -221,7 +380,9 @@ export function rehypeDynamicSvg(options: DynamicSvgOptions = {}) {
 						? originalProps.className.split(/\s+/)
 						: [];
 
-				svgProps.className = Array.from(new Set([...existingClasses, ...origClasses, baseClass]));
+				svgProps.className = Array.from(
+					new Set([...existingClasses, ...origClasses, baseClass]),
+				);
 
 				// Apply Pretext layout if configured
 				if (options.pretext?.enabled) {
@@ -231,7 +392,10 @@ export function rehypeDynamicSvg(options: DynamicSvgOptions = {}) {
 				// Replace the <img> element with the inlined <svg>
 				parent.children[index] = svgElement;
 			} catch (err) {
-				console.warn(`[@shirone-plugins/dynamic-svg] Failed to inline SVG from ${resolvedPath}:`, err);
+				console.warn(
+					`[@shirone-plugins/dynamic-svg] Failed to inline SVG from ${resolvedPath}:`,
+					err,
+				);
 			}
 		});
 	};
