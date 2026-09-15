@@ -1,0 +1,48 @@
+{
+  "name": "@shirone-plugins/dynamic-svg",
+  "version": "0.1.0",
+  "description": "Zero-runtime, build-time Rehype plugin and Astro integration for inlining SVGs with dynamic Material 3 color tokens and optional Pretext text measurement",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "keywords": [
+    "shirone",
+    "shirone-plugin",
+    "astro",
+    "astro-integration",
+    "rehype",
+    "rehype-plugin",
+    "svg",
+    "material-design-3",
+    "pretext"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "pnpm run build && node --test tests/**/*.test.mjs"
+  },
+  "peerDependencies": {
+    "astro": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "astro": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "hast-util-from-html": "^2.0.3",
+    "unist-util-visit": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0"
+  }
+}
