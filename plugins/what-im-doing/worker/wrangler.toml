@@ -12,7 +12,7 @@ workers_dev = true
 [[d1_databases]]
 binding = "DB"
 database_name = "what-im-doing-fleet"
-database_id = "your-d1-database-id-here"
+database_id = "39004996-6aa8-47dd-a013-e1d6b477520d"
 
 # Optional Standalone Security:
 # If not using Cloudflare Zero Trust Access for /admin, set a secret via:

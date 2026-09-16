@@ -96,7 +96,9 @@ const isOffline = $derived.by(() => {
 	if (currentActivity.offline) return true;
 	if (currentActivity.status === ActivityStatus.OFFLINE) return true;
 	const ts = currentActivity.lastSeen ?? currentActivity.timestamp;
-	if (ts && currentTime - ts > 120_000) return true;
+	const isServer = (currentActivity.type || "").toLowerCase() === "server";
+	const timeoutThreshold = isServer ? 900_000 : 120_000;
+	if (ts && currentTime - ts > timeoutThreshold) return true;
 	return false;
 });
 
@@ -184,12 +186,13 @@ const groupedDevices = $derived.by(() => {
 });
 
 const onlineDeviceCount = $derived(
-	devices.filter(
-		(d) =>
-			!d.offline &&
-			d.status !== ActivityStatus.OFFLINE &&
-			currentTime - (d.lastSeen ?? d.timestamp) <= 120_000,
-	).length,
+	devices.filter((d) => {
+		if (d.offline) return false;
+		if (d.status === ActivityStatus.OFFLINE) return false;
+		const isServer = (d.type || "").toLowerCase() === "server";
+		const timeoutThreshold = isServer ? 900_000 : 120_000;
+		return currentTime - (d.lastSeen ?? d.timestamp) <= timeoutThreshold;
+	}).length,
 );
 
 const filteredHistory = $derived.by(() => {
@@ -721,7 +724,8 @@ onMount(() => {
 
 								<div class="wid-group__grid">
 									{#each group.devices as dev}
-										{@const devOffline = dev.offline || dev.status === ActivityStatus.OFFLINE || (currentTime - (dev.lastSeen ?? dev.timestamp) > 120000)}
+										{@const isServer = (dev.type || "").toLowerCase() === "server"}
+										{@const devOffline = dev.offline || dev.status === ActivityStatus.OFFLINE || (currentTime - (dev.lastSeen ?? dev.timestamp) > (isServer ? 900000 : 120000))}
 										<div class="wid-device-card" class:wid-device-card--offline={devOffline} class:wid-device-card--active={!devOffline && dev.status === ActivityStatus.ACTIVE}>
 											<div class="wid-device-card__head">
 												<div class="wid-device-card__name-wrapper">
@@ -738,16 +742,17 @@ onMount(() => {
 													class="wid-device-card__badge"
 													class:wid-device-card__badge--active={!devOffline && dev.status === ActivityStatus.ACTIVE}
 													class:wid-device-card__badge--idle={!devOffline && dev.status === ActivityStatus.IDLE}
+													class:wid-device-card__badge--away={!devOffline && dev.status === ActivityStatus.AWAY}
 													class:wid-device-card__badge--offline={devOffline}
 												>
 													{#if devOffline}
 														离线
 													{:else if dev.status === ActivityStatus.ACTIVE}
-														正在活跃
+														{isServer ? "运行正常" : "正在活跃"}
 													{:else if dev.status === ActivityStatus.IDLE}
-														空闲
+														{isServer ? "待命中" : "空闲"}
 													{:else if dev.status === ActivityStatus.AWAY}
-														离开
+														{isServer ? "服务降级" : "离开"}
 													{:else}
 														在线
 													{/if}
@@ -757,24 +762,30 @@ onMount(() => {
 											<div class="wid-device-card__body">
 												{#if devOffline}
 													<div class="wid-device-card__app">
-														<span class="wid-device-card__muted-label">最后使用:</span>
+														<span class="wid-device-card__muted-label">{isServer ? "服务:" : "最后使用:"}</span>
 														<span class="wid-device-card__app-title">{dev.appName || "无记录"}</span>
 													</div>
+													{#if dev.windowTitle}
+														<div class="wid-device-card__win-title">{dev.windowTitle}</div>
+													{/if}
 													<div class="wid-device-card__time">
-														最后活跃: {formatRelativeTime(dev.lastSeen ?? dev.timestamp, currentTime, "zh")}
+														{isServer ? "最后心跳:" : "最后活跃:"} {formatRelativeTime(dev.lastSeen ?? dev.timestamp, currentTime, "zh")}
 														{#if dev.lastSeen || dev.timestamp}
 															<span class="wid-device-card__abs-time">({formatDateTime(dev.lastSeen ?? dev.timestamp)})</span>
 														{/if}
 													</div>
 												{:else}
 													<div class="wid-device-card__app">
-														<span class="wid-device-card__app-title">{dev.appName || "活动中"}</span>
+														<span class="wid-device-card__app-title">{dev.appName || (isServer ? "服务运行中" : "活动中")}</span>
 													</div>
+													{#if dev.windowTitle}
+														<div class="wid-device-card__win-title">{dev.windowTitle}</div>
+													{/if}
 													<div class="wid-device-card__time">
-														{#if dev.status === ActivityStatus.IDLE && dev.idleSeconds && dev.idleSeconds > 60}
+														{#if !isServer && dev.status === ActivityStatus.IDLE && dev.idleSeconds && dev.idleSeconds > 60}
 															已空闲 {Math.floor(dev.idleSeconds / 60)} 分钟
 														{:else}
-															活跃于 {formatRelativeTime(dev.lastSeen ?? dev.timestamp, currentTime, "zh")}
+															{isServer ? "心跳于" : "活跃于"} {formatRelativeTime(dev.lastSeen ?? dev.timestamp, currentTime, "zh")}
 														{/if}
 													</div>
 												{/if}

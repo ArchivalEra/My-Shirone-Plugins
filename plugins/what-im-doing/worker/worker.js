@@ -151,6 +151,30 @@ export default {
 			}
 		}
 
+		// 6b. Origin-Cache Telemetry: POST /api/activity/origin-cache or /api/origin-cache/report
+		if (
+			(pathname === "/api/activity/origin-cache" ||
+				pathname === "/api/origin-cache/report") &&
+			method === "POST"
+		) {
+			let body;
+			try {
+				body = await request.json();
+			} catch {
+				return errorResponse("Invalid JSON payload", 400);
+			}
+
+			try {
+				const result = await store.recordOriginCacheReport(body);
+				return jsonResponse(result, 200);
+			} catch (err) {
+				return errorResponse(
+					`Origin-cache ingestion error: ${err.message}`,
+					400,
+				);
+			}
+		}
+
 		// 7. Public Telemetry Consumer: GET /api/activity
 		if (pathname === "/api/activity" && method === "GET") {
 			const isBrief = url.searchParams.get("brief") === "1";

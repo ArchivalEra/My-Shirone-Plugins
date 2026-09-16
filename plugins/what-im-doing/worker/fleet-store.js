@@ -93,6 +93,133 @@ export class FleetStore {
 	}
 
 	/**
+	 * Ingests and normalizes an origin-cache watchdog status report (schema: origin-cache/status/1)
+	 */
+	async recordOriginCacheReport(payload) {
+		if (!payload || typeof payload !== "object") {
+			throw new Error("Payload must be a JSON object");
+		}
+		if (payload.schema !== "origin-cache/status/1") {
+			throw new Error(
+				`Unsupported schema '${payload.schema}', expected 'origin-cache/status/1'`,
+			);
+		}
+
+		const host = String(payload.host || "origin-1").trim();
+		const deviceId = `origin-cache-${host}`
+			.toLowerCase()
+			.replace(/[^a-z0-9_-]/g, "");
+		const deviceName = `云盘 CDN 存储 (${host})`;
+		const appName = String(payload.service || "origin-cache").slice(0, 64);
+		const reportTs = payload.ts ? Date.parse(payload.ts) : Date.now();
+		const validTs = Number.isNaN(reportTs) ? Date.now() : reportTs;
+		const now = Date.now();
+
+		// Check for existing device in D1 for deduplication & state tracking
+		const existing = await this.db
+			.prepare(
+				"SELECT status, window_title, last_seen, updated_at FROM devices WHERE id = ?",
+			)
+			.bind(deviceId)
+			.first();
+
+		// Idempotent deduplication: if exact or older timestamp and within 60s
+		if (
+			existing &&
+			validTs <= existing.last_seen &&
+			now - existing.updated_at < 60_000
+		) {
+			return {
+				ok: true,
+				deduplicated: true,
+				id: deviceId,
+				lastSeen: existing.last_seen,
+			};
+		}
+
+		// Status mapping:
+		// active -> 1, degraded -> 3, down -> 4
+		let status = 1;
+		const rawStatus = String(payload.status || "").toLowerCase();
+		const rawEvent = String(payload.event || "").toLowerCase();
+
+		if (rawEvent === "down" || rawStatus === "down") {
+			status = 4;
+		} else if (rawStatus === "degraded") {
+			status = 3;
+		} else {
+			status = 1;
+		}
+
+		// Window title (one-line human status for blog UI)
+		let windowTitle = "";
+		const entries = typeof payload.entries === "number" ? payload.entries : 0;
+		const entriesStr =
+			entries > 0 ? ` · 缓存条目 ${entries.toLocaleString()}` : "";
+
+		if (status === 4) {
+			if (payload.death && typeof payload.death === "object") {
+				const deathSig =
+					payload.death.exit_status || payload.death.exit_code || "killed";
+				const deathRes = payload.death.result || "signal";
+				windowTitle = `进程异常退出 (${deathRes}: ${deathSig})`;
+			} else {
+				windowTitle = "服务停止 / 待确认重启中";
+			}
+		} else if (status === 3) {
+			const reasonsMap = {
+				metadata_store_quarantined: "元数据隔离",
+				metadata_rows_rebuilt: "元数据重建",
+				disk_below_reserve: "磁盘低于预留线",
+			};
+			const reasons = Array.isArray(payload.degraded_reasons)
+				? payload.degraded_reasons.map((r) => reasonsMap[r] || r)
+				: [];
+			const reasonsText = reasons.length > 0 ? reasons.join(" · ") : "指标异常";
+			windowTitle = `服务降级 [${reasonsText}]${entriesStr}`;
+		} else {
+			windowTitle = entries > 0 ? `运行正常${entriesStr}` : "运行正常 · 待命中";
+		}
+
+		const osInfo = "Origin Cache (Linux / cloudflared)";
+
+		// Upsert into D1
+		await this.db
+			.prepare(`
+        INSERT INTO devices (id, name, type, status, app_name, window_title, idle_seconds, os_info, token, last_seen, updated_at)
+        VALUES (?, ?, 'server', ?, ?, ?, 0, ?, 'system_origin_cache', ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          name = excluded.name,
+          type = 'server',
+          status = excluded.status,
+          app_name = excluded.app_name,
+          window_title = excluded.window_title,
+          os_info = excluded.os_info,
+          last_seen = excluded.last_seen,
+          updated_at = excluded.updated_at
+      `)
+			.bind(
+				deviceId,
+				deviceName,
+				status,
+				appName,
+				windowTitle.slice(0, 256),
+				osInfo,
+				validTs,
+				now,
+			)
+			.run();
+
+		return {
+			ok: true,
+			id: deviceId,
+			event: payload.event,
+			status: payload.status,
+			lastSeen: validTs,
+		};
+	}
+
+	/**
 	 * Authenticates and records an incoming activity report from an edge probe
 	 */
 	async recordReport(payload, bearerToken) {
@@ -175,7 +302,8 @@ export class FleetStore {
 	}
 
 	/**
-	 * Builds the raw fleet telemetry snapshot with dynamic 120s offline calculation
+	 * Builds the raw fleet telemetry snapshot with dynamic offline calculation
+	 * (15 minutes for servers, 120 seconds for personal devices)
 	 */
 	async getSnapshot(brief = false) {
 		const now = Date.now();
@@ -189,7 +317,9 @@ export class FleetStore {
 
 		// Dynamically calculate offline status without modifying D1 table
 		const processedDevices = allDevices.map((dev) => {
-			const isOffline = now - dev.last_seen > 120_000;
+			const isServer = (dev.type || "").toLowerCase() === "server";
+			const timeoutMs = isServer ? 900_000 : 120_000;
+			const isOffline = now - dev.last_seen > timeoutMs;
 			const hasMedia = Boolean(dev.media_title);
 			return {
 				id: dev.id,
