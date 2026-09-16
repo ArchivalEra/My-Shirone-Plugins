@@ -3,10 +3,10 @@ main = "worker.js"
 compatibility_date = "2024-09-01"
 workers_dev = true
 
-# Optional Custom Domain Route (uncomment and replace with your domain if needed):
-# [[routes]]
-# pattern = "api.example.com"
-# custom_domain = true
+# Custom Domain Route:
+routes = [
+	{ pattern = "api.mango-mesa.ccwu.cc", custom_domain = true }
+]
 
 # Cloudflare D1 Database Binding
 [[d1_databases]]

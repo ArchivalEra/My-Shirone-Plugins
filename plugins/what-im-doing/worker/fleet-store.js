@@ -105,12 +105,17 @@ export class FleetStore {
 			);
 		}
 
-		const host = String(payload.host || "origin-1").trim();
+		const host = String(payload.host || payload.node || "origin-1").trim();
 		const deviceId = `origin-cache-${host}`
 			.toLowerCase()
 			.replace(/[^a-z0-9_-]/g, "");
 		const deviceName = `云盘 CDN 存储 (${host})`;
-		const appName = String(payload.service || "origin-cache").slice(0, 64);
+		const appName =
+			typeof payload.service === "string"
+				? payload.service.slice(0, 64)
+				: typeof payload.service === "object" && payload.service?.name
+					? String(payload.service.name).slice(0, 64)
+					: "origin-cache";
 		const reportTs = payload.ts ? Date.parse(payload.ts) : Date.now();
 		const validTs = Number.isNaN(reportTs) ? Date.now() : reportTs;
 		const now = Date.now();
