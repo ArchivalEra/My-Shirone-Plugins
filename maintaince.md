@@ -21,6 +21,7 @@
 | **`mixed-feed`** | 首页混合时间线流，实现长篇博文与轻量生活动态说说的无缝融合编排 | Astro Content Collections, Svelte 5 | 稳定运行 |
 | **`dynamic-svg`** | 内置原生 SVG 解析与树遍历器，与 pretext 联动实现 M3 动态主题配色注入 | 原生 AST 遍历器（零外部冗余依赖） | 稳定运行 |
 | **`repo-pages`** | GitHub Pages 仓库集群国内加速反代与项目展台集成（`isui.ren/repo/*`） | Node.js, `gh cli`, Svelte 5, EdgeOne 反代中间件 | 初始上线 |
+| **`mangomesa-hub`** | MangoMesa 博客、站点罗盘、开源项目与 Bahnhof 站台跨站互联集成 | TypeScript, Svelte 5, Astro Integration | 初始上线 |
 
 ---
 
@@ -112,6 +113,7 @@ plugins/<plugin-name>/
 
 | 日期 | 变更类型 | 影响插件 / 文件 | 变更要点详细说明 | 维护人 |
 | :--- | :--- | :--- | :--- | :--- |
+| 2026-09-17 | `feat` | `mangomesa-hub` | **新插件 @shirone-plugins/mangomesa-hub 初始实现**：提供跨站互联元数据体系（MANGOMESA_STATION_LINKS），打通 MangoMesa 博客主站、/compass/ 罗盘、/projects/ 项目展台与 /Bahnhof/ 中央调度站台；提供 M3E 穿梭胶囊组件 | ArchivalEra |
 | 2026-09-17 | `feat` | `repo-pages` | **新插件 @shirone-plugins/repo-pages 初始实现**：提供基于 `gh cli` 的自动化仓库 Pages 状态扫描与开通工具 (`shirone-repo-pages`)；实现 EdgeOne 边缘 HTML 流式重写与国内强缓存反代；配套 M3E 内嵌查看器与 Shirone 项目展台联动 | ArchivalEra |
 | 2026-09-16 | `docs` / `feat` | 全局 / `maintaince.md`, `.githooks/` | **初始化运维基线与预推送 Hook**：创建插件维护手册，确立零破坏向下兼容、禁用期零开销、M3E 表达范式与按需惰性加载四大铁律；配置 pre-push hook（支持 core.hooksPath、空推放行与标签旁路），确保推送必记变更日志 | ArchivalEra |
 | 2026-09-15 | `feat` | `what-im-doing` | **自定义域名绑定与看门狗解析优化**：绑定生产域名 `api.mango-mesa.ccwu.cc`，增强看门狗上报 payload 健壮性，优化设备异常上报容错 | ArchivalEra |

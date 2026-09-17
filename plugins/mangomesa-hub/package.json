@@ -1,0 +1,47 @@
+{
+  "name": "@shirone-plugins/mangomesa-hub",
+  "version": "0.1.0",
+  "description": "Navigation hub and cross-station integration linking MangoMesa, Compass, Projects, and Bahnhof",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./components/*": "./src/components/*",
+    "./package.json": "./package.json"
+  },
+  "keywords": [
+    "shirone",
+    "shirone-plugin",
+    "mangomesa",
+    "compass",
+    "projects",
+    "bahnhof"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test tests/**/*.test.mjs"
+  },
+  "peerDependencies": {
+    "astro": ">=5.0.0",
+    "svelte": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "astro": {
+      "optional": true
+    },
+    "svelte": {
+      "optional": true
+    }
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0"
+  }
+}
