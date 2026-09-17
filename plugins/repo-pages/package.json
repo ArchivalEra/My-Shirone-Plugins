@@ -1,0 +1,50 @@
+{
+  "name": "@shirone-plugins/repo-pages",
+  "version": "0.1.0",
+  "description": "Functionalize GitHub Pages for repository fleet with domestic EdgeOne reverse proxying under isui.ren/repo/* and Shirone UI showcase",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "shirone-repo-pages": "./bin/repo-pages.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./components/*": "./src/components/*",
+    "./package.json": "./package.json"
+  },
+  "keywords": [
+    "shirone",
+    "shirone-plugin",
+    "github-pages",
+    "reverse-proxy",
+    "edgeone",
+    "repository-showcase"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "pnpm run build && node --test tests/**/*.test.mjs"
+  },
+  "peerDependencies": {
+    "astro": ">=5.0.0",
+    "svelte": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "astro": {
+      "optional": true
+    },
+    "svelte": {
+      "optional": true
+    }
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0"
+  }
+}
