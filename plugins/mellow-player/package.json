@@ -1,0 +1,56 @@
+{
+  "name": "@shirone-plugins/mellow-player",
+  "version": "0.1.0",
+  "description": "M3E playback surface for Shirone: an on-intent facade over the native video element, with the Mellow-Player bounded-range WebCodecs engine docked behind the same seam",
+  "license": "MIT",
+  "author": "ArchivalEra",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./components/*": "./src/ui/*",
+    "./package.json": "./package.json"
+  },
+  "keywords": [
+    "shirone",
+    "shirone-plugin",
+    "mellow-player",
+    "video-player",
+    "webcodecs",
+    "matroska",
+    "m3e"
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc && node -e \"const fs=require('node:fs');fs.mkdirSync('dist/ui',{recursive:true});fs.copyFileSync('src/ui/PlayerSurface.svelte','dist/ui/PlayerSurface.svelte')\"",
+    "test": "pnpm run build && node --test tests/"
+  },
+  "peerDependencies": {
+    "astro": ">=5.0.0",
+    "svelte": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "astro": {
+      "optional": true
+    },
+    "svelte": {
+      "optional": true
+    }
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

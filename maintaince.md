@@ -23,6 +23,7 @@
 | **`repo-pages`** | GitHub Pages 仓库集群国内加速反代与项目展台集成（`isui.ren/repo/*`） | Node.js, `gh cli`, Svelte 5, EdgeOne 反代中间件 | 初始上线 |
 | **`mangomesa-hub`** | MangoMesa 博客、站点罗盘、开源项目与 Bahnhof 站台跨站互联集成 | TypeScript, Svelte 5, Astro Integration | 初始上线 |
 | **`repo-inventory`** | 构建期仓库清单：策展白名单的 GitHub Pages 三态、镜像树加速判定与最近推送时间 | Node.js, TypeScript（产物零依赖） | 初始上线 |
+| **`mellow-player`** | `::artplayer` 嵌入的 M3E 播放表面，背后是「原生 `<video>` / Mellow-Player 有界 Range 引擎」按容器选择的引擎接缝 | TypeScript, Svelte 5, Astro Integration, WebCodecs | 初始上线 |
 
 ---
 
@@ -114,6 +115,7 @@ plugins/<plugin-name>/
 
 | 日期 | 变更类型 | 影响插件 / 文件 | 变更要点详细说明 | 维护人 |
 | :--- | :--- | :--- | :--- | :--- |
+| 2026-09-26 | `feat` | `mellow-player` | **新插件 @shirone-plugins/mellow-player 初始实现**：给主题 `::artplayer` 嵌入换上 M3E 播放表面——只用设计 token，22 条用户可见文案全部由宿主经 `labels` 注入，插件自身零硬编码文案（缺键即拒绝安装并列出缺哪些，代价是少了增强而非坏掉的页面）。引擎做成一道接缝（`MediaEngine` + 能力表），两个适配器：`NativeMediaEngine`（媒体元素，默认）与 `MellowMediaEngine`（懒加载远端 ESM 契约，`engineUrl` 是唯一耦合面，模块只在读者按下播放时解析）；`chooseEngine` 按容器选（Matroska → Mellow，其余 → 原生），强制 Mellow 而引擎不可用则回退并把原因写进 `data-mp-engine-reason`；能力表让表面隐藏不支持的控件（`HeadlessPlayer` 暂无变速接口，故 Mellow 声明 `selectableRate: false` 且误调用 `setRate()` 抛 `EngineCapabilityError`）。运行时渐进增强 SSR 的 `figure[data-artplayer]`：`preload=auto` 走视口接近预载，`swup:content:replace` 重扫，按 `isConnected` 回收表面（Swup 换页后不残留解码器/音频上下文）。测试 58/58（含 `mellow-contract.test.mjs` 对着真实引擎产物核对接口契约）；实测点击前引擎请求 0、点击后 1，axe 0 违规 | ArchivalEra |
 | 2026-09-26 | `feat` | `repo-inventory` | **收录改为全自动**：由「读项目页白名单」改为「列账号下全部公开仓，减去排除表」（`selectDiscovered`：fork 计入、排除按名字逐条、私有一律排除）；清单新增 `description` / `language` / `url`，让没有手写简介的仓库也能直接成卡；CLI 参数由 `--whitelist` 换成 `--exclude-file`；测试 18/18 | ArchivalEra |
 | 2026-09-26 | `refactor` | `repo-pages` | **前缀重写合并为唯一实现**：新增 `src/rewrite-for-prefix.ts`（→ 零依赖单文件 `dist/rewrite-for-prefix.js`），删除零 call site 的旧 `rewriteRepoHtml`；heart 的中间件改为动态 import 主题部署 vendor 过去的该产物。修掉三个缺陷——仓名未转义、已有 `<base>` 时叠加第二个、`<head>` 匹配过窄；测试 9/9 | ArchivalEra |
 | 2026-09-26 | `docs` | `repo-inventory` | **记录产物落点规则**：清单必须落在自己的子目录（`src/data/repo-inventory/snapshot.json`），因为 `content:sync` 的裁剪只豁免内容仓不拥有的顶层段、而顶层文件的顶段是空串，会被误裁 | ArchivalEra |

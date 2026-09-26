@@ -18,6 +18,7 @@ All plugins in this repository are designed strictly adhering to Shirone's core 
 | [`pretext-masonry`](./plugins/pretext-masonry) | Active | Zero-reflow pure arithmetic waterfall layout powered by `@chenglou/pretext`, eliminating forced layout thrashing. |
 | [`mixed-feed`](./plugins/mixed-feed) | Active | Unified timeline feed combining long-form blog posts and lightweight micro-moments on the homepage. |
 | [`repo-inventory`](./plugins/repo-inventory) | Active | Build-time inventory of a curated repository whitelist: GitHub Pages state, accelerated mirrors, and last push, as dependency-free data for the theme's projects page. |
+| [`mellow-player`](./plugins/mellow-player) | Active | M3E playback surface for `::artplayer` embeds, with the [Mellow-Player](https://github.com/ArchivalEra/Mellow-Player) bounded-range WebCodecs engine docked behind an on-intent engine seam (native `<video>` by default). |
 
 ---
 
