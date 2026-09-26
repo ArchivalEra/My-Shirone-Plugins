@@ -69,8 +69,13 @@ pnpm build
 # 需要 GITHUB_TOKEN 才能用上 5000/hr 的认证配额
 GITHUB_TOKEN=xxx node bin/repo-inventory.mjs \
   --whitelist ../isui.ren-Blog/data/projects.ts \
-  --out ../Shirone-personalized/src/data/repo-inventory.json
+  --out ../Shirone-personalized/src/data/repo-inventory/snapshot.json
 ```
+
+**产物必须落在自己的子目录里。** 主题的 `content:sync` 裁剪只豁免"内容仓不拥有的顶层段"，
+而**顶层文件的顶段是空串**——与内容仓 `data/` 下的 `projects.ts` 同段，于是会被当成内容仓的
+文件裁掉（`anime-snapshots/` 用子目录正是这个原因）。放进 `src/data/repo-inventory/` 后
+实测 `pruned 0`，文件存活。
 
 | 参数 | 说明 |
 | :--- | :--- |
