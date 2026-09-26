@@ -1,8 +1,8 @@
 # @shirone-plugins/repo-inventory
 
-> 构建期仓库清单：为策展白名单里的仓库读出 GitHub Pages 状态与本集群的加速镜像情况。
+> 构建期仓库清单：列出账号下全部公开仓库，读出各自的 GitHub Pages 状态与本集群的加速镜像情况。
 
-给 Shirone 项目页提供**机器事实**的那一层。人写的简介、技术栈、`phase` 留在内容仓的 `data/projects.ts`；这里只回答三个问题——**这个仓有可用的 GitHub Pages 镜像吗？它是不是由本集群的镜像树直供的？最近一次推送是什么时候？**
+给 Shirone 项目页提供**机器事实**的那一层。收录范围是**自动**的：列全部公开仓库，减去一份排除表——新开的仓库不需要谁去登记，下一次构建就会自己出现。这里只回答四个问题——**这个仓有可用的 GitHub Pages 镜像吗？它是不是由本集群的镜像树直供的？最近一次推送是什么时候？它的简介和主语言是什么？**
 
 ---
 
@@ -56,7 +56,7 @@ export interface RepoInventory {
 两条刻意的取舍：
 
 - **读不到就不写。** `facts()` 返回 `null`（仓库读失败、限流）时，该仓**从 `entries` 里省略**，而不是猜一个状态。项目页因此显示"没有徽章"，而不是显示一个假徽章。
-- **`acceleratedDirs` 收全部目录名。** 镜像树里有、白名单里没有的目录就是孤儿——它们会被 CLI 单独报出来，这也是那棵无人引用的静态树能被自动发现的原因，而不是靠人记得。
+- **`acceleratedDirs` 收全部目录名。** 镜像树里有、没有任何仓库对应的目录就是孤儿——它们会被 CLI 单独报出来，这也是那棵无人引用的静态树能被自动发现的原因，而不是靠人记得。
 
 ---
 
@@ -68,7 +68,7 @@ pnpm build
 
 # 需要 GITHUB_TOKEN 才能用上 5000/hr 的认证配额
 GITHUB_TOKEN=xxx node bin/repo-inventory.mjs \
-  --whitelist ../isui.ren-Blog/data/projects.ts \
+  --exclude-file ../isui.ren-Blog/data/repo-exclusions.txt \
   --out ../Shirone-personalized/src/data/repo-inventory/snapshot.json
 ```
 
@@ -79,7 +79,7 @@ GITHUB_TOKEN=xxx node bin/repo-inventory.mjs \
 
 | 参数 | 说明 |
 | :--- | :--- |
-| `--whitelist <file>` | 必填。 Shirone 的项目数据模块，`repository` 字段即白名单 |
+| `--exclude-file <file>` | 要从收录里剔除的仓库名，一行一个（`#` 注释）。缺省则收录全部公开仓 |
 | `--out <file>` | 必填。清单 JSON 的输出路径 |
 | `--owner <user>` | 默认 `ArchivalEra` |
 | `--mirror-repo <name>` | 默认 `isui.ren-heart`，即镜像树所在仓库 |
@@ -89,7 +89,9 @@ GITHUB_TOKEN=xxx node bin/repo-inventory.mjs \
 
 环境变量：`GITHUB_TOKEN`（可选）。没有它就走匿名配额，遇到限流会直接失败而不是静默少报。
 
-**白名单只认 `repository` 字段**，且只认给定 owner 的仓库：`LyraVoid/Shirone` 这类上游 fork 会被自动排除。
+**收录规则**：`!private && 不在排除表里`。fork 也在内——规则是「非私有、未排除」，不是「非 fork」；排除按**名字**逐条列，所以藏掉一个仓不会顺手藏掉它的邻居。排除表是一行一个名字的纯文本文件，推荐放在内容仓 `data/` 下，由部署流程传进来。
+
+清单因此同时带着 `description`、`language`、`url`：自动收录的仓库没有手写简介，这几个字段就是它在卡片上的全部内容——**一个编辑性字段都不编**（`phase` 因此缺省，卡片也就不渲染那枚胶囊）。
 
 ---
 
@@ -99,4 +101,4 @@ GITHUB_TOKEN=xxx node bin/repo-inventory.mjs \
 pnpm test    # 先 build，再 node --test tests/
 ```
 
-15 条用例，全部穿过 `list()` 这个 interface（假 adapter），覆盖三态判定、`accelerated` 判定、白名单归一化与顺序、读不到时省略而非猜测、孤儿保留，以及 `parseWhitelist` 的 owner/host/去重/后缀归一。
+18 条用例，全部穿过 `list()` 与 `selectDiscovered()` 两个 interface（假 adapter），覆盖三态判定、`accelerated` 判定、公开/私有/排除/去重/名字归一的选取规则、读不到时省略而非猜测、孤儿保留，以及 Biome 形状的序列化。

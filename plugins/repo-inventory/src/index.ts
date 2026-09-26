@@ -1,20 +1,21 @@
 /**
  * @shirone-plugins/repo-inventory
  *
- * Build-time repository inventory for the isui.ren cluster: which repositories in
- * the curated whitelist have a usable GitHub Pages mirror, which are served from
- * this cluster's own mirror tree, and when each was last pushed.
+ * Build-time repository inventory for the isui.ren cluster: every public
+ * repository the owner has, with whether it has a usable GitHub Pages mirror,
+ * whether it is served from this cluster's own mirror tree, and when it was last
+ * pushed.
  *
- * The module owns the model and the classification, and never touches the network
- * or the filesystem — every fact arrives through the injected `InventoryDeps`. So
- * the whole of `list()` is testable with a fake adapter, and the CLI that does the
- * fetching stays a thin shell around the same interface.
+ * The module owns the model, the selection rule and the classification, and never
+ * touches the network or the filesystem — every fact arrives through the injected
+ * `InventoryDeps`. So the whole of `list()` is testable with a fake adapter, and
+ * the CLI that does the fetching stays a thin shell around the same interface.
  */
 
 export type RepoPagesState = "ready" | "absent" | "pending";
 
 export interface RepoState {
-	/** Repository name, as it appears in the whitelist and in `/repo/<name>/`. */
+	/** Repository name, as it appears on GitHub and in `/repo/<name>/`. */
 	name: string;
 	/**
 	 * `ready`   — Pages is enabled and the last build succeeded, or its build
@@ -33,13 +34,19 @@ export interface RepoState {
 	 * when it could not be read. Carried for diagnostics; never rendered.
 	 */
 	status: string | null;
+	/** GitHub description, verbatim and possibly empty. Nothing here is editorial. */
+	description: string;
+	/** Primary language GitHub reports, or null when it reports none. */
+	language: string | null;
+	/** Canonical GitHub URL. Carried so a consumer never has to know the owner. */
+	url: string;
 }
 
 export interface RepoInventory {
 	generatedAt: string;
 	/**
-	 * Every directory name found under the mirror tree, including ones no longer
-	 * in the whitelist. Those orphans are what this list exists to expose.
+	 * Every directory name found under the mirror tree, including ones nothing
+	 * selects any more. Those orphans are what this list exists to expose.
 	 */
 	acceleratedDirs: string[];
 	/** Only repositories whose facts were actually read. A failed read is an omission, never a guess. */
@@ -51,6 +58,9 @@ export interface RepoFacts {
 	hasPages: boolean;
 	pushedAt: string;
 	status: string | null;
+	description?: string;
+	language?: string | null;
+	url?: string;
 }
 
 /**
@@ -63,7 +73,13 @@ export interface InventoryDeps {
 	now(): string;
 }
 
-const OWNER_FILTER = /^[A-Za-z0-9._-]+$/;
+/** What the adapter must know about a repository for it to be selected at all. */
+export interface DiscoveredRepo {
+	name: string;
+	private?: boolean;
+}
+
+const NAME_FILTER = /^[A-Za-z0-9._-]+$/;
 
 function normalizeName(raw: string): string {
 	return raw
@@ -72,7 +88,7 @@ function normalizeName(raw: string): string {
 		.replace(/^\/+|\/+$/g, "");
 }
 
-function normalizeWhitelist(names: string[]): string[] {
+function normalizeNames(names: readonly string[]): string[] {
 	const seen = new Set<string>();
 	const out: string[] = [];
 	for (const raw of names) {
@@ -94,14 +110,14 @@ function classifyPages(hasPages: boolean, status: string | null): RepoPagesState
 }
 
 function buildInventory(
-	whitelist: string[],
+	names: readonly string[],
 	facts: Map<string, RepoFacts>,
-	acceleratedDirs: string[],
+	acceleratedDirs: readonly string[],
 	generatedAt: string,
 ): RepoInventory {
 	const accelerated = new Set(acceleratedDirs);
 	const entries: RepoState[] = [];
-	for (const name of whitelist) {
+	for (const name of names) {
 		const found = facts.get(name);
 		if (!found) continue;
 		entries.push({
@@ -110,6 +126,9 @@ function buildInventory(
 			accelerated: accelerated.has(name),
 			pushedAt: found.pushedAt,
 			status: found.status,
+			description: found.description ?? "",
+			language: found.language ?? null,
+			url: found.url ?? "",
 		});
 	}
 	return {
@@ -120,58 +139,52 @@ function buildInventory(
 }
 
 /**
- * Pull repository names out of a Shirone projects data module.
+ * Decide which repositories the inventory covers: everything the owner has that
+ * is not private and not explicitly excluded.
  *
- * Only `repository` fields on the given owner count: the whitelist is the
- * curated project list, so a repository that is not presented there has no
- * business appearing in the inventory.
+ * Forks are included on purpose — the rule is "not private, not excluded", and a
+ * fork the owner keeps public is part of what they have. Exclusion is a list of
+ * names rather than a pattern so that hiding one repository never hides a
+ * neighbour by accident.
  */
-export function parseWhitelist(source: string, owner: string): string[] {
-	const wanted = owner.trim().toLowerCase();
-	if (!wanted) return [];
-	const found: string[] = [];
-	const pattern = /repository\s*:\s*["'`]([^"'`]+)["'`]/g;
-	for (const match of source.matchAll(pattern)) {
-		let url: URL;
-		try {
-			url = new URL(match[1]);
-		} catch {
-			continue;
-		}
-		if (url.hostname.toLowerCase() !== "github.com") continue;
-		const segments = url.pathname.replace(/^\/+/, "").split("/");
-		const [repoOwner, repoName] = segments;
-		if (!repoOwner || !repoName) continue;
-		if (repoOwner.toLowerCase() !== wanted) continue;
-		const name = normalizeName(repoName);
-		if (!name || !OWNER_FILTER.test(name)) continue;
-		found.push(name);
+export function selectDiscovered(
+	repos: readonly DiscoveredRepo[],
+	exclude: readonly string[] = [],
+): string[] {
+	const excluded = new Set(normalizeNames(exclude));
+	const names: string[] = [];
+	for (const repo of repos) {
+		if (!repo || repo.private) continue;
+		const name = normalizeName(typeof repo.name === "string" ? repo.name : "");
+		if (!name || excluded.has(name) || !NAME_FILTER.test(name)) continue;
+		names.push(name);
 	}
-	return normalizeWhitelist(found);
+	return normalizeNames(names);
 }
 
 /**
- * Read the inventory for a curated whitelist.
+ * Read the inventory for the given repositories.
  *
- * Facts are read concurrently; the returned order follows the whitelist, so the
- * projects page renders in its curated order rather than in API order.
+ * Facts are read concurrently; the returned order follows `names`, so the caller
+ * decides the order by the order it passes (most recently pushed first, say)
+ * rather than getting whatever the API happened to return.
  */
 export async function list(
-	whitelist: string[],
+	names: readonly string[],
 	deps: InventoryDeps,
 ): Promise<RepoInventory> {
-	const names = normalizeWhitelist(whitelist);
+	const selected = normalizeNames(names);
 	const [acceleratedDirs, read] = await Promise.all([
 		deps.acceleratedDirs(),
 		Promise.all(
-			names.map(async (name) => [name, await deps.facts(name)] as const),
+			selected.map(async (name) => [name, await deps.facts(name)] as const),
 		),
 	]);
 	const facts = new Map<string, RepoFacts>();
 	for (const [name, value] of read) {
 		if (value) facts.set(name, value);
 	}
-	return buildInventory(names, facts, acceleratedDirs, deps.now());
+	return buildInventory(selected, facts, acceleratedDirs, deps.now());
 }
 
 /** Biome's default print width. The ecosystem formats with `indentStyle: tab`. */

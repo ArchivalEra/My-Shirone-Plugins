@@ -3,43 +3,9 @@ import assert from "node:assert/strict";
 
 import {
 	list,
-	parseWhitelist,
+	selectDiscovered,
 	serializeInventory,
 } from "../dist/index.js";
-
-const PROJECTS_MODULE = `
-export const projectsData: ProjectItem[] = [
-	{
-		key: "alpha",
-		title: "Alpha",
-		repository: "https://github.com/ArchivalEra/alpha",
-	},
-	{
-		key: "beta",
-		title: "Beta",
-		repository: "https://github.com/ArchivalEra/beta.git",
-	},
-	{
-		key: "upstream",
-		title: "Upstream fork",
-		repository: "https://github.com/SomeoneElse/not-mine",
-	},
-	{
-		key: "elsewhere",
-		title: "Elsewhere",
-		repository: "https://gitlab.com/ArchivalEra/elsewhere",
-	},
-	{
-		key: "dupe",
-		title: "Alpha again",
-		repository: "https://github.com/ArchivalEra/alpha/",
-	},
-	{
-		key: "norepo",
-		title: "No repository field",
-	},
-];
-`;
 
 function makeAdapter({ factsByName, dirs = [], generatedAt = "2026-09-26T00:00:00.000Z" }) {
 	const calls = [];
@@ -54,32 +20,44 @@ function makeAdapter({ factsByName, dirs = [], generatedAt = "2026-09-26T00:00:0
 	};
 }
 
-test("parseWhitelist keeps only the given owner's repositories, in order, deduped", () => {
-	assert.deepEqual(parseWhitelist(PROJECTS_MODULE, "ArchivalEra"), [
+const LISTING = [
+	{ name: "alpha", private: false },
+	{ name: "beta", private: true },
+	{ name: "ArchivalEra", private: false },
+	{ name: "gamma-fork", private: false },
+	{ name: "alpha", private: false },
+];
+
+test("selectDiscovered keeps every public repository and drops private ones", () => {
+	assert.deepEqual(selectDiscovered(LISTING), [
 		"alpha",
-		"beta",
+		"ArchivalEra",
+		"gamma-fork",
 	]);
 });
 
-test("parseWhitelist drops forks, other hosts and entries without a repository field", () => {
-	const names = parseWhitelist(PROJECTS_MODULE, "ArchivalEra");
-	assert.ok(!names.includes("not-mine"));
-	assert.ok(!names.includes("elsewhere"));
-	assert.equal(names.length, 2);
+test("selectDiscovered drops exactly the excluded names, and nothing else", () => {
+	const names = selectDiscovered(LISTING, ["ArchivalEra"]);
+	assert.deepEqual(names, ["alpha", "gamma-fork"]);
 });
 
-test("parseWhitelist normalizes a trailing slash and a .git suffix to one name", () => {
-	const names = parseWhitelist(PROJECTS_MODULE, "ArchivalEra");
-	assert.equal(names.filter((name) => name === "alpha").length, 1);
-	assert.ok(names.includes("beta"));
+test("selectDiscovered keeps public forks: the rule is not-private, not not-a-fork", () => {
+	assert.ok(selectDiscovered(LISTING).includes("gamma-fork"));
 });
 
-test("parseWhitelist matches the owner case-insensitively and returns nothing without an owner", () => {
-	assert.deepEqual(parseWhitelist(PROJECTS_MODULE, "archivalera"), [
-		"alpha",
-		"beta",
+test("selectDiscovered normalizes and de-duplicates names, and ignores unusable ones", () => {
+	const names = selectDiscovered([
+		{ name: " alpha " },
+		{ name: "alpha" },
+		{ name: "alpha.git" },
+		{ name: "" },
+		{ name: "bad name" },
 	]);
-	assert.deepEqual(parseWhitelist(PROJECTS_MODULE, ""), []);
+	assert.deepEqual(names, ["alpha"]);
+});
+
+test("selectDiscovered tolerates an empty listing", () => {
+	assert.deepEqual(selectDiscovered([]), []);
 });
 
 test("list classifies an enabled, built mirror as ready", async () => {
@@ -93,6 +71,35 @@ test("list classifies an enabled, built mirror as ready", async () => {
 	assert.equal(inventory.entries[0].pages, "ready");
 	assert.equal(inventory.entries[0].status, "built");
 	assert.equal(inventory.entries[0].pushedAt, "2026-09-20T00:00:00Z");
+});
+
+test("list carries the description and language through untouched", async () => {
+	const adapter = makeAdapter({
+		factsByName: {
+			alpha: {
+				hasPages: false,
+				pushedAt: "",
+				status: null,
+				description: "我牛逼",
+				language: "Shell",
+				url: "https://github.com/ArchivalEra/alpha",
+			},
+		},
+	});
+	const inventory = await list(["alpha"], adapter);
+	assert.equal(inventory.entries[0].description, "我牛逼");
+	assert.equal(inventory.entries[0].language, "Shell");
+	assert.equal(inventory.entries[0].url, "https://github.com/ArchivalEra/alpha");
+});
+
+test("list reports an absent description and language as empty, not undefined", async () => {
+	const adapter = makeAdapter({
+		factsByName: { alpha: { hasPages: false, pushedAt: "", status: null } },
+	});
+	const inventory = await list(["alpha"], adapter);
+	assert.equal(inventory.entries[0].description, "");
+	assert.equal(inventory.entries[0].language, null);
+	assert.equal(inventory.entries[0].url, "");
 });
 
 test("list classifies an enabled mirror whose build is not built as pending", async () => {
@@ -161,7 +168,7 @@ test("list keeps mirror-tree orphans in acceleratedDirs so they can be spotted",
 	);
 });
 
-test("list follows the whitelist order, not the adapter's response order", async () => {
+test("list follows the order it is given, not the adapter's response order", async () => {
 	const adapter = makeAdapter({
 		factsByName: {
 			zeta: { hasPages: false, pushedAt: "", status: null },
@@ -175,7 +182,7 @@ test("list follows the whitelist order, not the adapter's response order", async
 	);
 });
 
-test("list normalizes the whitelist before reading facts, so each name is read once", async () => {
+test("list normalizes its input, so each name is read once", async () => {
 	const adapter = makeAdapter({
 		factsByName: { alpha: { hasPages: false, pushedAt: "", status: null } },
 	});

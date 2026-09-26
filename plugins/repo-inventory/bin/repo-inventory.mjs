@@ -2,10 +2,10 @@
 /**
  * @shirone-plugins/repo-inventory CLI
  *
- * Build-time probe: read the curated whitelist's GitHub state and the mirror
- * repository's `repo/` tree, then write the inventory the theme's projects page
- * consumes (baked into the build, and published as `/sites.json` for the page's
- * manual refresh).
+ * Build-time probe: list every public repository the owner has, read each one's
+ * Pages state and the mirror repository's `repo/` tree, then write the inventory
+ * the theme's projects page consumes (baked into the build, and published as a
+ * static file for the page's manual refresh).
  *
  * Requires `pnpm build` in this plugin first — the fetching below is only an
  * adapter, the module in `../dist/index.js` owns the model.
@@ -16,7 +16,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	list,
-	parseWhitelist,
+	selectDiscovered,
 	serializeInventory,
 } from "../dist/index.js";
 
@@ -32,16 +32,16 @@ const DEFAULTS = {
 
 const USAGE = `@shirone-plugins/repo-inventory CLI
 
-Read the curated whitelist's GitHub state plus the mirror repository's repo/
-tree, and write the inventory JSON consumed by the Shirone projects page.
+Inventory every public repository of a GitHub owner: Pages state, mirror
+acceleration and last push, as JSON for a Shirone projects page.
 
 Usage:
-  shirone-repo-inventory --whitelist <file> --out <file> [options]
+  shirone-repo-inventory --out <file> [options]
 
 Options:
   --owner <user>          GitHub user/org (default: "${DEFAULTS.owner}")
-  --whitelist <file>      Shirone projects data module holding the curated list (required)
   --out <file>            Inventory JSON to write (required)
+  --exclude-file <file>   Names to leave out, one per line ("#" comments allowed)
   --mirror-repo <name>    Repository whose tree holds the accelerated mirrors (default: "${DEFAULTS.mirrorRepo}")
   --mirror-branch <ref>   Branch to read that tree from (default: "${DEFAULTS.mirrorBranch}")
   --mirror-dir <path>     Directory inside that repository (default: "${DEFAULTS.mirrorDir}")
@@ -70,6 +70,16 @@ function parseArgs(argv) {
 	return flags;
 }
 
+/** Read an exclusion list: one repository name per line, `#` starts a comment. */
+function readExclusions(file) {
+	if (!file) return [];
+	const text = fs.readFileSync(file, "utf8");
+	return text
+		.split("\n")
+		.map((line) => line.split("#")[0].trim())
+		.filter(Boolean);
+}
+
 function makeAdapter({ api, owner, mirrorRepo, mirrorBranch, mirrorDir, token }) {
 	const headers = {
 		Accept: "application/vnd.github+json",
@@ -87,6 +97,30 @@ function makeAdapter({ api, owner, mirrorRepo, mirrorBranch, mirrorDir, token })
 	}
 
 	return {
+		/** The only place that knows GitHub's list shape. */
+		async discover() {
+			const endpoint = `/users/${owner}/repos?per_page=100&type=owner&sort=pushed`;
+			const response = await request(endpoint);
+			if (!response.ok) {
+				throw new Error(
+					`repository listing failed (HTTP ${response.status}) — refusing to write a partial inventory`,
+				);
+			}
+			const listing = await response.json();
+			if (!Array.isArray(listing)) {
+				throw new Error("repository listing was not an array");
+			}
+			if (listing.length === 100) {
+				warn(
+					"listing returned exactly 100 repositories: the page limit was hit, so the tail is missing",
+				);
+			}
+			return listing.map((repo) => ({
+				name: typeof repo?.name === "string" ? repo.name : "",
+				private: Boolean(repo?.private),
+			}));
+		},
+
 		async facts(name) {
 			const repoResponse = await request(`/repos/${owner}/${name}`);
 			if (!repoResponse.ok) {
@@ -113,6 +147,9 @@ function makeAdapter({ api, owner, mirrorRepo, mirrorBranch, mirrorDir, token })
 				hasPages,
 				pushedAt: typeof repo.pushed_at === "string" ? repo.pushed_at : "",
 				status,
+				description: typeof repo.description === "string" ? repo.description : "",
+				language: typeof repo.language === "string" ? repo.language : null,
+				url: typeof repo.html_url === "string" ? repo.html_url : "",
 			};
 		},
 
@@ -147,20 +184,12 @@ async function main() {
 	}
 
 	const owner = flags.owner || DEFAULTS.owner;
-	const whitelistPath = flags.whitelist;
 	const outPath = flags.out;
-	if (!whitelistPath || !outPath) {
-		throw new Error("--whitelist and --out are both required (see --help)");
+	if (!outPath) {
+		throw new Error("--out is required (see --help)");
 	}
 
-	const source = fs.readFileSync(whitelistPath, "utf8");
-	const whitelist = parseWhitelist(source, owner);
-	if (whitelist.length === 0) {
-		throw new Error(
-			`no ${owner} repositories found in ${whitelistPath} — refusing to write an empty inventory`,
-		);
-	}
-
+	const exclude = readExclusions(flags["exclude-file"]);
 	const adapter = makeAdapter({
 		api: flags.api || DEFAULTS.api,
 		owner,
@@ -170,7 +199,15 @@ async function main() {
 		token: process.env.GITHUB_TOKEN || "",
 	});
 
-	const inventory = await list(whitelist, adapter);
+	const discovered = await adapter.discover();
+	const names = selectDiscovered(discovered, exclude);
+	if (names.length === 0) {
+		throw new Error(
+			`no repositories selected for ${owner} (${discovered.length} listed, ${exclude.length} excluded)`,
+		);
+	}
+
+	const inventory = await list(names, adapter);
 
 	fs.mkdirSync(path.dirname(path.resolve(outPath)), { recursive: true });
 	fs.writeFileSync(outPath, serializeInventory(inventory));
@@ -178,19 +215,20 @@ async function main() {
 	const counts = { ready: 0, absent: 0, pending: 0 };
 	for (const entry of inventory.entries) counts[entry.pages] += 1;
 	const accelerated = inventory.entries.filter((entry) => entry.accelerated).length;
+	const skipped = discovered.length - names.length;
 
 	console.log(
-		`[repo-inventory] ${inventory.entries.length}/${whitelist.length} repositories ` +
+		`[repo-inventory] ${inventory.entries.length}/${names.length} repositories ` +
 			`(ready ${counts.ready} · absent ${counts.absent} · pending ${counts.pending} · ` +
-			`accelerated ${accelerated}) -> ${outPath}`,
+			`accelerated ${accelerated})${skipped > 0 ? ` · ${skipped} excluded/private` : ""} -> ${outPath}`,
 	);
 
-	const known = new Set(whitelist);
+	const known = new Set(names);
 	const orphans = inventory.acceleratedDirs.filter((name) => !known.has(name));
 	if (orphans.length > 0) {
 		console.log(
 			`[repo-inventory] mirror tree holds ${orphans.length} director${orphans.length === 1 ? "y" : "ies"} ` +
-				`with no whitelist entry: ${orphans.join(", ")}`,
+				`nothing selects: ${orphans.join(", ")}`,
 		);
 	}
 
