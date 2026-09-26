@@ -3,7 +3,7 @@
 > **仓库属性**：Shirone 博客主题生态模块化插件与扩展组件库  
 > **宿主主题**：[ArchivalEra/Shirone-personalized](https://github.com/ArchivalEra/Shirone-personalized) (Upstream: [LyraVoid/Shirone](https://github.com/LyraVoid/Shirone))  
 > **内容仓库**：[ArchivalEra/isui.ren-Blog](https://github.com/ArchivalEra/isui.ren-Blog)  
-> **最后修订基线**：2026-09-16  
+> **最后修订基线**：2026-09-26  
 
 ---
 
@@ -22,6 +22,7 @@
 | **`dynamic-svg`** | 内置原生 SVG 解析与树遍历器，与 pretext 联动实现 M3 动态主题配色注入 | 原生 AST 遍历器（零外部冗余依赖） | 稳定运行 |
 | **`repo-pages`** | GitHub Pages 仓库集群国内加速反代与项目展台集成（`isui.ren/repo/*`） | Node.js, `gh cli`, Svelte 5, EdgeOne 反代中间件 | 初始上线 |
 | **`mangomesa-hub`** | MangoMesa 博客、站点罗盘、开源项目与 Bahnhof 站台跨站互联集成 | TypeScript, Svelte 5, Astro Integration | 初始上线 |
+| **`repo-inventory`** | 构建期仓库清单：策展白名单的 GitHub Pages 三态、镜像树加速判定与最近推送时间 | Node.js, TypeScript（产物零依赖） | 初始上线 |
 
 ---
 
@@ -113,6 +114,7 @@ plugins/<plugin-name>/
 
 | 日期 | 变更类型 | 影响插件 / 文件 | 变更要点详细说明 | 维护人 |
 | :--- | :--- | :--- | :--- | :--- |
+| 2026-09-26 | `feat` | `repo-inventory` | **新插件 @shirone-plugins/repo-inventory 初始实现**：构建期读取策展白名单（`data/projects.ts` 的 `repository` 字段）的 Pages 三态（ready/absent/pending）、由镜像树目录名判定的 accelerated 与最近推送；产出烘焙 JSON 供项目页 join，并提供 CLI 直出同一份 JSON；模块零依赖零网络（事实经注入 probe 进入），`list()` 即测试面；CLI 顺带报告镜像树中无白名单条目的孤儿目录 | ArchivalEra |
 | 2026-09-17 | `feat` | `mangomesa-hub` | **新插件 @shirone-plugins/mangomesa-hub 初始实现**：提供跨站互联元数据体系（MANGOMESA_STATION_LINKS），打通 MangoMesa 博客主站、/compass/ 罗盘、/projects/ 项目展台与 /Bahnhof/ 中央调度站台；提供 M3E 穿梭胶囊组件 | ArchivalEra |
 | 2026-09-17 | `feat` | `repo-pages` | **新插件 @shirone-plugins/repo-pages 初始实现**：提供基于 `gh cli` 的自动化仓库 Pages 状态扫描与开通工具 (`shirone-repo-pages`)；实现 EdgeOne 边缘 HTML 流式重写与国内强缓存反代；配套 M3E 内嵌查看器与 Shirone 项目展台联动 | ArchivalEra |
 | 2026-09-16 | `docs` / `feat` | 全局 / `maintaince.md`, `.githooks/` | **初始化运维基线与预推送 Hook**：创建插件维护手册，确立零破坏向下兼容、禁用期零开销、M3E 表达范式与按需惰性加载四大铁律；配置 pre-push hook（支持 core.hooksPath、空推放行与标签旁路），确保推送必记变更日志 | ArchivalEra |

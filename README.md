@@ -17,6 +17,7 @@ All plugins in this repository are designed strictly adhering to Shirone's core 
 | [`strip-first-h1`](./plugins/strip-first-h1) | Active | Compile-time AST optimizer to eliminate redundant first `<h1>` headings, fixing double title syndrome & TOC pollution. |
 | [`pretext-masonry`](./plugins/pretext-masonry) | Active | Zero-reflow pure arithmetic waterfall layout powered by `@chenglou/pretext`, eliminating forced layout thrashing. |
 | [`mixed-feed`](./plugins/mixed-feed) | Active | Unified timeline feed combining long-form blog posts and lightweight micro-moments on the homepage. |
+| [`repo-inventory`](./plugins/repo-inventory) | Active | Build-time inventory of a curated repository whitelist: GitHub Pages state, accelerated mirrors, and last push, as dependency-free data for the theme's projects page. |
 
 ---
 

@@ -1,0 +1,44 @@
+{
+  "name": "@shirone-plugins/repo-inventory",
+  "version": "0.1.0",
+  "description": "Build-time repository inventory: GitHub Pages state and accelerated mirrors for a curated repository whitelist.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "shirone-repo-inventory": "./bin/repo-inventory.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md"
+  ],
+  "keywords": [
+    "shirone",
+    "shirone-plugin",
+    "github-pages",
+    "repository-inventory",
+    "build-time"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "pnpm run build && node --test tests/"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
