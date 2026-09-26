@@ -174,7 +174,14 @@ export async function list(
 	return buildInventory(names, facts, acceleratedDirs, deps.now());
 }
 
-/** Stable on-disk form: two-space JSON with a trailing newline. */
+/**
+ * Stable on-disk form: tab-indented JSON with a trailing newline.
+ *
+ * Tabs because that is what this ecosystem's formatter (Biome, `indentStyle:
+ * tab`) expects of anything living under a theme's `src/` — the artifact is
+ * generated straight into `src/data/`, so it has to arrive lint-clean instead
+ * of being reformatted on every build.
+ */
 export function serializeInventory(inventory: RepoInventory): string {
-	return `${JSON.stringify(inventory, null, 2)}\n`;
+	return `${JSON.stringify(inventory, null, "\t")}\n`;
 }
