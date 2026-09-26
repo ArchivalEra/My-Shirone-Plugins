@@ -114,6 +114,7 @@ plugins/<plugin-name>/
 
 | 日期 | 变更类型 | 影响插件 / 文件 | 变更要点详细说明 | 维护人 |
 | :--- | :--- | :--- | :--- | :--- |
+| 2026-09-26 | `refactor` | `repo-pages` | **前缀重写合并为唯一实现**：新增 `src/rewrite-for-prefix.ts`（→ 零依赖单文件 `dist/rewrite-for-prefix.js`），删除零 call site 的旧 `rewriteRepoHtml`；heart 的中间件改为动态 import 主题部署 vendor 过去的该产物。修掉三个缺陷——仓名未转义、已有 `<base>` 时叠加第二个、`<head>` 匹配过窄；测试 9/9 | ArchivalEra |
 | 2026-09-26 | `docs` | `repo-inventory` | **记录产物落点规则**：清单必须落在自己的子目录（`src/data/repo-inventory/snapshot.json`），因为 `content:sync` 的裁剪只豁免内容仓不拥有的顶层段、而顶层文件的顶段是空串，会被误裁 | ArchivalEra |
 | 2026-09-26 | `fix` | `repo-inventory` | **清单改为直接产出 Biome 形状的 JSON**：不再依赖 `JSON.stringify`（它永远展开数组），改为自带排版器——tab 缩进、对象始终展开、纯标量数组按 80 列折叠，与消费方 Biome 的规则一致；因此主题侧无需为该生成物开豁免（豁免违反 CONTRIBUTING 的强制格式化条款） | ArchivalEra |
 | 2026-09-26 | `fix` | `repo-inventory` | **清单序列化改为 tab 缩进**：产物直接生成进主题 `src/data/`，与该生态的 Biome（`indentStyle: tab`）一致，避免每次构建被 reformat；短数组仍由 formatter 折叠，故主题 `biome.json` 将该生成物并入生成文件豁免表（与 `src/user/user-config.ts` 同类） | ArchivalEra |

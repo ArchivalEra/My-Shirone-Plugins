@@ -16,6 +16,14 @@
 
 ---
 
+## 前缀重写的唯一实现
+
+`rewriteForPrefix(html, { repo, prefix })` 是本集群里**唯一**一份"把一份 HTML 挪到镜像前缀下"的实现：
+
+- 它编译成**零依赖单文件**（`dist/rewrite-for-prefix.js`，无 `import`/`require`），因此 edge 可以直接消费；
+- 主题仓部署时把它 vendor 到 heart 仓 `deploy` 分支的 `rewrite-for-prefix.mjs`，heart 的中间件用**动态 import** 加载（该运行时支持同目录 import，已实测）；每次部署重算，所以 edge 那份永远等于这里的当前构建——手抄漂移正是它此前长出两份实现、并带上同一个转义缺陷的原因；
+- 行为范围刻意划死：一个 `<base>`（已有则**替换**，绝不叠加第二个）+ 本仓自身子路径的根绝对引用（仓名**按字面**处理，因为本舰队仓名含 `.`）。`srcset`、CSS `url()`、JS 内拼的路径**不在范围内**——被镜像的都是自建站点，两种写法（相对 / 根绝对）已知。
+
 ## CLI 工具用法
 
 ```bash

@@ -46,41 +46,12 @@ export function getOriginalGitHubPagesUrl(
 }
 
 /**
- * Rewrites an upstream GitHub Pages HTML document to ensure all relative and
- * absolute subpath assets resolve correctly under the `/repo/<repoName>/` prefix.
+ * Prefix rewriting lives in its own dependency-free module: the edge middleware
+ * imports the build of that file directly, so this export is a re-export rather
+ * than a second implementation.
  */
-export function rewriteRepoHtml(
-	html: string,
-	repoName: string,
-	routePrefix = DEFAULT_CONFIG.routePrefix,
-): string {
-	if (!html || typeof html !== "string") return html;
-
-	const cleanRepo = repoName.trim().replace(/^\/+|\/+$/g, "");
-	const cleanPrefix = routePrefix.trim().replace(/^\/+|\/+$/g, "");
-	const baseTarget = `/${cleanPrefix}/${cleanRepo}/`;
-
-	let result = html;
-
-	// 1. Inject or update <base href="...">
-	if (result.includes("<head>")) {
-		result = result.replace(
-			"<head>",
-			`<head>\n    <base href="${baseTarget}">`,
-		);
-	} else if (result.includes("<head ")) {
-		result = result.replace(
-			/(<head[^>]*>)/i,
-			`$1\n    <base href="${baseTarget}">`,
-		);
-	}
-
-	// 2. Replace absolute references to /<repoName>/ with /<routePrefix>/<repoName>/
-	const repoPattern = new RegExp(`(href|src|action)=["']/${cleanRepo}/`, "g");
-	result = result.replace(repoPattern, `$1="${baseTarget}`);
-
-	return result;
-}
+export { rewriteForPrefix } from "./rewrite-for-prefix.js";
+export type { RewriteForPrefixOptions } from "./rewrite-for-prefix.js";
 
 /**
  * Astro Integration for Shirone themes.
