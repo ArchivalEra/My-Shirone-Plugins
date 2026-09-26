@@ -193,11 +193,24 @@ test("list stamps the inventory with the injected clock", async () => {
 	assert.deepEqual(inventory.entries, []);
 });
 
-test("serializeInventory emits indented JSON with a trailing newline", async () => {
+test("serializeInventory emits Biome-shaped JSON, not JSON.stringify's shape", async () => {
 	const adapter = makeAdapter({
-		factsByName: { alpha: { hasPages: true, pushedAt: "", status: "built" } },
+		factsByName: {
+			alpha: { hasPages: true, pushedAt: "2026-01-01T00:00:00Z", status: "built" },
+		},
+		dirs: ["beta", "alpha"],
 	});
 	const text = serializeInventory(await list(["alpha"], adapter));
-	assert.ok(text.endsWith("}\n"));
-	assert.deepEqual(JSON.parse(text).entries[0].name, "alpha");
+
+	assert.ok(text.startsWith("{\n\t"), "top-level object is expanded with tab indent");
+	assert.ok(
+		text.includes('\t"acceleratedDirs": ["alpha", "beta"],'),
+		"a short scalar array collapses onto one line",
+	);
+	assert.ok(
+		text.includes('\n\t"entries": [\n\t\t{\n'),
+		"objects stay expanded rather than collapsing",
+	);
+	assert.ok(text.endsWith("}\n"), "trailing newline");
+	assert.equal(JSON.parse(text).entries[0].name, "alpha");
 });

@@ -114,6 +114,7 @@ plugins/<plugin-name>/
 
 | 日期 | 变更类型 | 影响插件 / 文件 | 变更要点详细说明 | 维护人 |
 | :--- | :--- | :--- | :--- | :--- |
+| 2026-09-26 | `fix` | `repo-inventory` | **清单改为直接产出 Biome 形状的 JSON**：不再依赖 `JSON.stringify`（它永远展开数组），改为自带排版器——tab 缩进、对象始终展开、纯标量数组按 80 列折叠，与消费方 Biome 的规则一致；因此主题侧无需为该生成物开豁免（豁免违反 CONTRIBUTING 的强制格式化条款） | ArchivalEra |
 | 2026-09-26 | `fix` | `repo-inventory` | **清单序列化改为 tab 缩进**：产物直接生成进主题 `src/data/`，与该生态的 Biome（`indentStyle: tab`）一致，避免每次构建被 reformat；短数组仍由 formatter 折叠，故主题 `biome.json` 将该生成物并入生成文件豁免表（与 `src/user/user-config.ts` 同类） | ArchivalEra |
 | 2026-09-26 | `feat` | `repo-inventory` | **新插件 @shirone-plugins/repo-inventory 初始实现**：构建期读取策展白名单（`data/projects.ts` 的 `repository` 字段）的 Pages 三态（ready/absent/pending）、由镜像树目录名判定的 accelerated 与最近推送；产出烘焙 JSON 供项目页 join，并提供 CLI 直出同一份 JSON；模块零依赖零网络（事实经注入 probe 进入），`list()` 即测试面；CLI 顺带报告镜像树中无白名单条目的孤儿目录 | ArchivalEra |
 | 2026-09-17 | `feat` | `mangomesa-hub` | **新插件 @shirone-plugins/mangomesa-hub 初始实现**：提供跨站互联元数据体系（MANGOMESA_STATION_LINKS），打通 MangoMesa 博客主站、/compass/ 罗盘、/projects/ 项目展台与 /Bahnhof/ 中央调度站台；提供 M3E 穿梭胶囊组件 | ArchivalEra |

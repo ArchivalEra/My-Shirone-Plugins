@@ -174,14 +174,67 @@ export async function list(
 	return buildInventory(names, facts, acceleratedDirs, deps.now());
 }
 
+/** Biome's default print width. The ecosystem formats with `indentStyle: tab`. */
+const LINE_WIDTH = 80;
+const INDENT = "\t";
+
+function isScalar(value: unknown): boolean {
+	return value === null || typeof value !== "object";
+}
+
+/** Inline form of a flat array, or null when it has to break onto its own lines. */
+function inlineArrayText(items: unknown[]): string | null {
+	if (items.length === 0) return "[]";
+	if (!items.every(isScalar)) return null;
+	return `[${items.map((item) => JSON.stringify(item)).join(", ")}]`;
+}
+
 /**
- * Stable on-disk form: tab-indented JSON with a trailing newline.
+ * Format a value the way Biome formats JSON: tab indentation, objects always
+ * expanded, arrays collapsed onto one line while they fit the print width.
  *
- * Tabs because that is what this ecosystem's formatter (Biome, `indentStyle:
- * tab`) expects of anything living under a theme's `src/` — the artifact is
- * generated straight into `src/data/`, so it has to arrive lint-clean instead
- * of being reformatted on every build.
+ * `column` is how many characters precede the value on its line, so the
+ * collapse decision matches the formatter that will read this file back.
+ */
+function formatJson(value: unknown, depth: number, column: number): string {
+	if (Array.isArray(value)) {
+		const inline = inlineArrayText(value);
+		if (inline !== null && column + inline.length + 1 <= LINE_WIDTH) {
+			return inline;
+		}
+		if (value.length === 0) return "[]";
+		const pad = INDENT.repeat(depth + 1);
+		const body = value
+			.map((item) => pad + formatJson(item, depth + 1, pad.length))
+			.join(",\n");
+		return `[\n${body}\n${INDENT.repeat(depth)}]`;
+	}
+
+	if (value !== null && typeof value === "object") {
+		const members = Object.entries(value as Record<string, unknown>);
+		if (members.length === 0) return "{}";
+		const pad = INDENT.repeat(depth + 1);
+		const body = members
+			.map(([key, item]) => {
+				const prefix = `${JSON.stringify(key)}: `;
+				const value0 = formatJson(item, depth + 1, pad.length + prefix.length);
+				return `${pad}${prefix}${value0}`;
+			})
+			.join(",\n");
+		return `{\n${body}\n${INDENT.repeat(depth)}}`;
+	}
+
+	return JSON.stringify(value) ?? "null";
+}
+
+/**
+ * Stable on-disk form.
+ *
+ * Emitted in Biome's own JSON shape rather than `JSON.stringify`'s, because the
+ * artifact is generated straight into a theme's `src/`: a file that fails
+ * `biome ci` would have to be reformatted on every build, and exempting it
+ * would be an exemption the contribution rules do not allow.
  */
 export function serializeInventory(inventory: RepoInventory): string {
-	return `${JSON.stringify(inventory, null, "\t")}\n`;
+	return `${formatJson(inventory, 0, 0)}\n`;
 }
