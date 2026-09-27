@@ -14,6 +14,7 @@ export * from "./protocol/types.js";
 export * from "./engine/engine.js";
 export * from "./engine/mellow.js";
 export * from "./engine/native.js";
+export * from "./engine/probe.js";
 export * from "./engine/selection.js";
 
 export * from "./runtime/enhance.js";

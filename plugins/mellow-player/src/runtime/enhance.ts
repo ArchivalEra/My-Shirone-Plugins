@@ -13,7 +13,8 @@ import type { MediaEngine } from "../engine/engine.js";
 import type { MellowPlayerModule } from "../engine/mellow.js";
 import { MellowMediaEngine } from "../engine/mellow.js";
 import { NativeMediaEngine } from "../engine/native.js";
-import { chooseEngine } from "../engine/selection.js";
+import { createOriginProbe } from "../engine/probe.js";
+import { chooseEngine, matroskaExtension } from "../engine/selection.js";
 import { describeFailure } from "../format.js";
 import type { ResolvedPlayerConfig } from "../protocol/types.js";
 
@@ -21,6 +22,9 @@ const FIGURE_SELECTOR = "figure[data-artplayer]";
 const ENHANCED_FLAG = "mpEnhanced";
 const SURFACE_CLASS = "mp-host";
 const APPROACH_MARGIN = "240px 0px";
+
+/** Page-lifetime, per-origin: CORS is granted per origin, so one read covers all. */
+const probeOrigin = createOriginProbe();
 
 declare global {
 	interface Window {
@@ -49,6 +53,8 @@ export interface EnhanceDeps {
 	createNativeEngine?: () => MediaEngine;
 	/** Injected so the engine contract is testable without a network. */
 	importEngineModule?: (url: string) => Promise<unknown>;
+	/** Injected so origin reachability is testable without a network. */
+	probeOrigin?: (src: string) => Promise<boolean>;
 	/** Arms the on-approach callback. Defaults to an IntersectionObserver. */
 	armApproach?: (element: Element, run: () => void) => void;
 	/** Injected so mounting is observable without a Svelte runtime. */
@@ -184,15 +190,40 @@ async function defaultMountSurface(
 	};
 }
 
+/**
+ * Whether the bounded-range engine could read this source at all.
+ *
+ * Only asked when the answer can change the outcome — an embed that is not
+ * Matroska, or a site with no engine configured, goes to the native element
+ * either way and must not spend a request finding that out.
+ */
+async function resolveReadability(
+	target: ArtPlayerTarget,
+	deps: EnhanceDeps,
+): Promise<boolean> {
+	const { config } = deps;
+	if (config.engine === "native" || config.engineUrl === null) return false;
+	const matters =
+		config.engine === "mellow" ||
+		matroskaExtension(target.src) !== null;
+	if (!matters) return true;
+	return (deps.probeOrigin ?? probeOrigin)(target.src);
+}
+
 async function mountTarget(
 	target: ArtPlayerTarget,
 	deps: EnhanceDeps,
 ): Promise<void> {
 	const { config } = deps;
+	const mellowAvailable = config.engineUrl !== null;
+	// Awaited before anything is hidden or replaced: while the origin is being
+	// asked, the server-rendered player is still there and still usable.
+	const mellowReadable = await resolveReadability(target, deps);
 	const choice = chooseEngine({
 		src: target.src,
 		preference: config.engine,
-		mellowAvailable: config.engineUrl !== null,
+		mellowAvailable,
+		mellowReadable,
 	});
 
 	target.figure.dataset.mpEngine = choice.engine;

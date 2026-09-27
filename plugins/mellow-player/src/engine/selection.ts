@@ -27,6 +27,7 @@ export type EngineChoiceReason =
 	| "forced-native"
 	| "forced-mellow"
 	| "mellow-unavailable"
+	| "mellow-unreadable"
 	| "matroska-source"
 	| "non-matroska-source";
 
@@ -35,6 +36,12 @@ export interface EngineChoiceInput {
 	preference: EnginePreference;
 	/** False when no engine URL is configured, or the module failed to load. */
 	mellowAvailable: boolean;
+	/**
+	 * False when the origin refuses cross-origin reads. The engine reads with
+	 * `fetch`, so a source that plays fine in a media element can still be
+	 * unreadable to it — see `probeBoundedRanges`.
+	 */
+	mellowReadable: boolean;
 }
 
 export interface EngineChoice {
@@ -45,28 +52,33 @@ export interface EngineChoice {
 /**
  * Picks the engine for one embed.
  *
- * Forcing Mellow on a source it cannot demux would trade a working element for
- * an exclusivity error, so a forced Mellow that is unavailable falls back and
- * says so; the surface prints the reason in its diagnostics panel.
+ * Forcing Mellow on a source it cannot demux, or cannot read, would trade a
+ * working element for an error, so a forced Mellow that is unavailable or
+ * unreadable falls back and says why; the surface prints the reason in its
+ * diagnostics panel.
  */
 export function chooseEngine(input: EngineChoiceInput): EngineChoice {
-	const { src, preference, mellowAvailable } = input;
+	const { src, preference, mellowAvailable, mellowReadable } = input;
 
 	if (preference === "native") {
 		return { engine: "native", reason: "forced-native" };
-	}
-
-	if (preference === "mellow") {
-		return mellowAvailable
-			? { engine: "mellow", reason: "forced-mellow" }
-			: { engine: "native", reason: "mellow-unavailable" };
 	}
 
 	if (!mellowAvailable) {
 		return { engine: "native", reason: "mellow-unavailable" };
 	}
 
-	return matroskaExtension(src) !== null
+	if (preference === "mellow") {
+		return mellowReadable
+			? { engine: "mellow", reason: "forced-mellow" }
+			: { engine: "native", reason: "mellow-unreadable" };
+	}
+
+	if (matroskaExtension(src) === null) {
+		return { engine: "native", reason: "non-matroska-source" };
+	}
+
+	return mellowReadable
 		? { engine: "mellow", reason: "matroska-source" }
-		: { engine: "native", reason: "non-matroska-source" };
+		: { engine: "native", reason: "mellow-unreadable" };
 }

@@ -15,7 +15,20 @@ Shirone 的 `::artplayer` 语法原本只输出一个带 `controls` 的原生 `<
 | `native` | 浏览器支持的一切（含 MP4） | 默认选择。零额外请求，`preload` 语义照旧 |
 | `mellow` | 仅 Matroska（`.mkv` / `.webm`） | 严格有界的 `bytes=A-B` 调度、Cues 二分寻址、WebCodecs 硬解、线路审计 |
 
-默认策略 `engine: "auto"`：只有源是 Matroska 时才交给 Mellow。MP4 交给 Mellow 只会换来一句容器排他性错误，所以强制指定 Mellow 而引擎又不可用时会**回退到原生**并在诊断面板里写明原因（`data-mp-engine-reason`）。
+默认策略 `engine: "auto"`：只有源是 Matroska 时才交给 Mellow。MP4 交给 Mellow 只会换来一句容器排他性错误。**容器之外还要看可达性**——Mellow 用 `fetch` 读媒体，而媒体元素不需要 CORS，所以一个源可以「能播但读不到」：云盘/对象存储当源站时这是常态。因此对一个本来要选 Mellow 的嵌入，运行时会先做一次**单字节有界 Range 探测**（`bytes=0-0`，按 origin 缓存，一页多个同源嵌入只探一次），只接受 `206`（`200` 意味着源站忽略了 Range、开始整片流式交付，Mellow 自己也会熔断拒收）。
+
+于是引擎选择有四种落点，原因都写在 `data-mp-engine-reason` 上：
+
+| 落点 | 原因 | 含义 |
+| :--- | :--- | :--- |
+| `mellow` | `matroska-source` | Matroska + 源站允许跨源读取 |
+| `mellow` | `forced-mellow` | 作者指定 |
+| `native` | `non-matroska-source` | 非 Matroska，容器不支持 |
+| `native` | `mellow-unreadable` | 容器对但源站不给 CORS：退回原生，播放仍然可用 |
+| `native` | `mellow-unavailable` | 没配 `engineUrl`（或模块加载失败） |
+| `native` | `forced-native` | 作者指定 |
+
+探测只在「答案会改变结果」时发出：非 Matroska 的源、以及未配置引擎的站点，一律直接给原生，不会为此花掉一次请求。探测失败（跨源被拦、超时、非 206）都只是「不可读」，不是错误。
 
 ---
 
@@ -26,6 +39,8 @@ Shirone 的 `::artplayer` 语法原本只输出一个带 `controls` 的原生 `<
 1. **内联引导脚本**（每个页面，约 600 字节）：只做一件事——页面里存在 `figure[data-artplayer]` 时，才去 `import()` 运行时模块。没有嵌入的页面到此为止。
 2. **运行时 + 表面 + 适配器**（首次出现嵌入时）：接管 SSR 生成的 `<figure>`，把原生元素标记 `hidden`，挂载 Svelte 表面。此时仍未碰引擎。
 3. **引擎模块**（读者首次按下播放时）：`WebAssembly` 内核与解复用器共约 68 KB gzip，来自配置的 `engineUrl`。没按播放就永远不会请求。
+
+引擎绑定之前还会多一步：对本来要选 Mellow 的嵌入做一次单字节 Range 探测（见上节）。它在任何东西被隐藏或替换**之前**完成，所以源站在被问的这段时间里，服务端渲染的那个原生播放器还在、还能用。
 
 `preload="auto"` 的嵌入会在接近视口时（`IntersectionObserver`, `rootMargin: 240px`）提前完成第 2 层与引擎的 `load()`，与主题既有的视频 facade 行为一致。
 

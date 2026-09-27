@@ -105,9 +105,19 @@ function makeDeps(overrides = {}) {
 					},
 				};
 			},
+			// An origin that grants cross-origin reads, so the container decides.
+			probeOrigin: async () => true,
 			...overrides,
 		},
 	};
+}
+
+/**
+ * Mounting awaits the origin probe before touching the DOM, because the player
+ * the reader already has must stay usable until the engine is actually chosen.
+ */
+async function settle() {
+	for (let i = 0; i < 6; i += 1) await Promise.resolve();
 }
 
 test.beforeEach(() => {
@@ -127,13 +137,14 @@ test("readArtPlayerTarget refuses a figure it cannot drive", () => {
 	assert.equal(target.preload, "none");
 });
 
-test("a Matroska source is handed to the Mellow engine, and the element is silenced", () => {
+test("a Matroska source is handed to the Mellow engine, and the element is silenced", async () => {
 	installDocument();
 	const video = makeVideo({ src: "/videos/movie.mkv" });
 	const figure = makeFigure(video);
 	const { deps } = makeDeps();
 
 	assert.equal(enhanceArtPlayer(makeRoot([figure]), deps), 1);
+	await settle();
 
 	assert.equal(figure.dataset.mpEngine, "mellow");
 	assert.equal(figure.dataset.mpEngineReason, "matroska-source");
@@ -145,18 +156,67 @@ test("a Matroska source is handed to the Mellow engine, and the element is silen
 	assert.equal(figure.inserted.className, "mp-host");
 });
 
-test("a non-Matroska source stays on the native engine with its source intact", () => {
+test("a non-Matroska source stays on the native engine with its source intact", async () => {
 	installDocument();
 	const video = makeVideo({ src: "/videos/movie.mp4" });
 	const figure = makeFigure(video);
-	const { deps } = makeDeps();
+	const probed = [];
+	const { deps } = makeDeps({
+		probeOrigin: async (src) => {
+			probed.push(src);
+			return true;
+		},
+	});
 
 	enhanceArtPlayer(makeRoot([figure]), deps);
+	await settle();
 
 	assert.equal(figure.dataset.mpEngine, "native");
 	assert.equal(figure.dataset.mpEngineReason, "non-matroska-source");
 	assert.equal(video.hidden, true);
 	assert.equal(video.removedSrc, 0);
+	// The native element was always going to be chosen, so asking the origin
+	// whether the engine could read it would be a wasted request.
+	assert.deepEqual(probed, []);
+});
+
+test("an origin that refuses cross-origin reads keeps the native player", async () => {
+	// The drive-backed CDN case: a valid Matroska file over bounded ranges, but
+	// no CORS, so the engine's fetch never sees a byte. The reader must get a
+	// working player rather than a failed surface.
+	installDocument();
+	const video = makeVideo({ src: "https://cdn.example.com/drive/movie.mkv" });
+	const figure = makeFigure(video);
+	const { deps } = makeDeps({ probeOrigin: async () => false });
+
+	enhanceArtPlayer(makeRoot([figure]), deps);
+	await settle();
+
+	assert.equal(figure.dataset.mpEngine, "native");
+	assert.equal(figure.dataset.mpEngineReason, "mellow-unreadable");
+	// Nothing was silenced: the element is the player, so it keeps its source.
+	assert.equal(video.removedSrc, 0);
+	assert.equal(video.hidden, true);
+});
+
+test("a site with no engine configured never probes an origin", async () => {
+	installDocument();
+	const probed = [];
+	const { deps } = makeDeps({
+		config: { ...CONFIG, engineUrl: null },
+		probeOrigin: async (src) => {
+			probed.push(src);
+			return true;
+		},
+	});
+
+	const figure = makeFigure(makeVideo({ src: "/videos/movie.mkv" }));
+	enhanceArtPlayer(makeRoot([figure]), deps);
+	await settle();
+
+	assert.equal(figure.dataset.mpEngine, "native");
+	assert.equal(figure.dataset.mpEngineReason, "mellow-unavailable");
+	assert.deepEqual(probed, []);
 });
 
 test("one figure is claimed once, however often the runtime re-runs", () => {
@@ -170,7 +230,7 @@ test("one figure is claimed once, however often the runtime re-runs", () => {
 	assert.equal(enhanceArtPlayer(root, deps), 0);
 });
 
-test("`preload=auto` defers the mount until the embed is approached", () => {
+test("`preload=auto` defers the mount until the embed is approached", async () => {
 	installDocument();
 	const figure = makeFigure(makeVideo({ preload: "auto" }));
 	const armed = [];
@@ -181,9 +241,12 @@ test("`preload=auto` defers the mount until the embed is approached", () => {
 	assert.equal(enhanceArtPlayer(makeRoot([figure]), deps), 1);
 	assert.equal(armed.length, 1);
 	assert.equal(armed[0].element, figure);
+	// Nothing is decided — not even the origin probe — until the embed is near
+	// the viewport.
 	assert.equal(figure.dataset.mpEngine, undefined);
 
 	armed[0].run();
+	await settle();
 	assert.equal(figure.dataset.mpEngine, "mellow");
 });
 
@@ -206,8 +269,7 @@ test("a failed mount restores the server-rendered element", async () => {
 	});
 
 	enhanceArtPlayer(makeRoot([figure]), deps);
-	await Promise.resolve();
-	await Promise.resolve();
+	await settle();
 
 	assert.equal(video.hidden, false);
 	assert.equal(figure.inserted.removed, 1);
@@ -226,8 +288,7 @@ test("surfaces left behind by a Swup replacement are disposed of", async () => {
 
 	enhanceArtPlayer(makeRoot([makeFigure(makeVideo({}))]), deps);
 	enhanceArtPlayer(makeRoot([makeFigure(makeVideo({}))]), deps);
-	await Promise.resolve();
-	await Promise.resolve();
+	await settle();
 
 	assert.equal(hosts.length, 2);
 	assert.equal(pruneArtPlayerSurfaces(), 0);
