@@ -16,6 +16,7 @@ export * from "./engine/mellow.js";
 export * from "./engine/native.js";
 export * from "./engine/probe.js";
 export * from "./engine/selection.js";
+export * from "./engine/ticket.js";
 
 export * from "./runtime/enhance.js";
 

@@ -135,3 +135,4 @@ plugins/<plugin-name>/
 | 2026-09-13 | `fix` | `what-im-doing` | **胶囊文案规范化**：格式化文案为「正在 AppName」，首字母大写，优化深浅主题对比度 | ArchivalEra |
 | 2026-09-12 | `refactor` | `what-im-doing` | **采集端瘦身与去重**：精简 collector 上报逻辑，聚焦 process@device 模式，收敛组件多重渲染冗余 | ArchivalEra |
 | 2026-09-11 | `feat` | `what-im-doing` | **动态防刷刷新药丸**：在状态抽屉中增加带有冷却反作弊机制的动态扩展刷新药丸按钮 | ArchivalEra |
+| 2026-09-28 | `feat` | `mellow-player` | **取票能力（signed reads, ADR-0027 客户端半边）**：源站内容签名翻闸后，未签名读取被源站拒绝，裸 CDN 地址只在边缘热缓存时能播。新增 `ticket: { endpoint, hosts }` 配置与 `engine/ticket.ts`：命中 host 的嵌入在挂载前向端点 POST 现签一张票（先于可达性探测——签名源上对裸地址探测会把冷对象误读为「不可读」，签名 URL 随后顶替裸地址喂探测与引擎）；`TicketedEngine` 包装器把表面的 `load(原始地址)` 映射到当前票，票到期前 5 分钟定时重签、播放中报错重签续播一次（回到最后位置）、端点失联每分钟退避重试；同一 `session` 由端点 Cookie 钉住，客户端只发凭据不自造身份。签名 URL 不出运行时（表面/诊断仍显示原始地址），票指向异 host 即拒收，取票失败静默退回裸地址与无取票能力完全一致。端点本身由运营方运维（密钥只在其侧，包装其 `deploy/oracle/presign.py`），契约写进 README「取票」节，主题侧待端点上线后一行接线。测试 70→92：取票路由匹配、现签成功/异 host 拒收/失败形态、过期重签、错误恢复、定时器换票与退避、穿透与销毁 | ArchivalEra |

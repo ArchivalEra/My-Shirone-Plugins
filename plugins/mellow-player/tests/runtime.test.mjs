@@ -113,11 +113,12 @@ function makeDeps(overrides = {}) {
 }
 
 /**
- * Mounting awaits the origin probe before touching the DOM, because the player
- * the reader already has must stay usable until the engine is actually chosen.
+ * Mounting awaits minting and the origin probe before touching the DOM,
+ * because the player the reader already has must stay usable until the engine
+ * is actually chosen.
  */
 async function settle() {
-	for (let i = 0; i < 6; i += 1) await Promise.resolve();
+	for (let i = 0; i < 12; i += 1) await Promise.resolve();
 }
 
 test.beforeEach(() => {
@@ -324,4 +325,88 @@ test("surfaces left behind by a Swup replacement are disposed of", async () => {
 	assert.equal(pruneArtPlayerSurfaces(), 0);
 
 	disposeArtPlayerSurfaces();
+});
+
+test("a ticketed source mints first, and the probe reads the signed URL", async () => {
+	installDocument();
+	const src = "https://cdn.example.com/drive/movie.mkv";
+	const signed = `${src}?X-Amz-Signature=abc`;
+	const figure = makeFigure(makeVideo({ src }));
+	const probed = [];
+	const minted = [];
+	const { deps } = makeDeps({
+		probeOrigin: async (probedSrc) => {
+			probed.push(probedSrc);
+			return true;
+		},
+		mintTicket: async (endpoint, mintSrc) => {
+			minted.push({ endpoint, mintSrc });
+			return { url: signed, expiresAt: new Date(Date.now() + 3_600_000).toISOString() };
+		},
+			scheduleTimer: () => () => {},
+			config: {
+				...CONFIG,
+				ticket: { endpoint: "/mp-ticket", hosts: ["cdn.example.com"] },
+			},
+	});
+
+	enhanceArtPlayer(makeRoot([figure]), deps);
+	await settle();
+
+	assert.equal(figure.dataset.mpTicket, "ok");
+	assert.deepEqual(minted, [{ endpoint: "/mp-ticket", mintSrc: src }]);
+	// An unsigned probe on a signed origin would read as "unreadable" on any
+	// cold object, so the probe must ask about the ticket, not the source.
+	assert.deepEqual(probed, [signed]);
+	assert.equal(figure.dataset.mpEngine, "mellow");
+	assert.equal(figure.dataset.mpEngineReason, "matroska-source");
+});
+
+test("a mint that fails falls back to the bare source", async () => {
+	installDocument();
+	const src = "https://cdn.example.com/drive/movie.mkv";
+	const figure = makeFigure(makeVideo({ src }));
+	const probed = [];
+	const { deps } = makeDeps({
+		probeOrigin: async (probedSrc) => {
+			probed.push(probedSrc);
+			return true;
+		},
+		mintTicket: async () => null,
+			scheduleTimer: () => () => {},
+			config: {
+				...CONFIG,
+				ticket: { endpoint: "/mp-ticket", hosts: ["cdn.example.com"] },
+			},
+	});
+
+	enhanceArtPlayer(makeRoot([figure]), deps);
+	await settle();
+
+	assert.equal(figure.dataset.mpTicket, "unavailable");
+	assert.deepEqual(probed, [src]);
+});
+
+test("a source outside the ticket hosts never asks the endpoint", async () => {
+	installDocument();
+	const figure = makeFigure(makeVideo({ src: "https://other.example.net/movie.mkv" }));
+	const minted = [];
+	const { deps } = makeDeps({
+		probeOrigin: async () => true,
+		mintTicket: async (endpoint, mintSrc) => {
+			minted.push({ endpoint, mintSrc });
+			return null;
+		},
+			scheduleTimer: () => () => {},
+			config: {
+				...CONFIG,
+				ticket: { endpoint: "/mp-ticket", hosts: ["cdn.example.com"] },
+			},
+	});
+
+	enhanceArtPlayer(makeRoot([figure]), deps);
+	await settle();
+
+	assert.equal(figure.dataset.mpTicket, undefined);
+	assert.deepEqual(minted, []);
 });

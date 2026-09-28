@@ -69,6 +69,17 @@ export const PLAYER_LABEL_KEYS: readonly (keyof PlayerLabels)[] = [
 	"seekLatency",
 ];
 
+/**
+ * Where to take a ticket, and which source hosts need one. The endpoint is
+ * run by the operator — it holds the signing secret — and must accept the
+ * contract documented in the plugin README. `null` disables ticketing
+ * entirely: sources play from their bare URLs as before.
+ */
+export interface PlayerTicketConfig {
+	endpoint: string;
+	hosts: string[];
+}
+
 /** Raw configuration as an `astro.config.mjs` author writes it. */
 export interface PlayerOptionsInput {
 	enabled?: boolean;
@@ -88,6 +99,8 @@ export interface PlayerOptionsInput {
 	labels?: Partial<PlayerLabels>;
 	/** Path prefixes the runtime is allowed to enhance. Empty means everywhere. */
 	routeFilter?: string[];
+	/** Per-session ticketing for sources on signed-read origins. */
+	ticket?: Partial<PlayerTicketConfig> | null;
 }
 
 /** Configuration after defaults, validation and label normalisation. */
@@ -98,6 +111,7 @@ export interface ResolvedPlayerConfig {
 	diagnostics: boolean;
 	labels: PlayerLabels;
 	routeFilter: string[];
+	ticket: PlayerTicketConfig | null;
 }
 
 /** Why the plugin declined to install itself. */

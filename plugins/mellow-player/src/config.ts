@@ -8,7 +8,7 @@ import {
 	type PlayerConfigResolution,
 	type PlayerLabels,
 	type PlayerOptionsInput,
-	type ResolvedPlayerConfig,
+	type PlayerTicketConfig,
 } from "./protocol/types.js";
 
 const ENGINE_PREFERENCES = new Set(["auto", "native", "mellow"]);
@@ -49,6 +49,25 @@ function normalizeRouteFilter(value: unknown): string[] {
 		.filter((entry): entry is string => typeof entry === "string")
 		.map((entry) => entry.trim())
 		.filter((entry) => entry.length > 0);
+}
+
+/**
+ * Ticketing needs both halves to be worth anything: an endpoint nobody
+ * answers, or hosts nobody serves, would only add a doomed request in front
+ * of every embed. Either half missing — or malformed — disables the whole
+ * route rather than degrading at play time.
+ */
+export function normalizeTicketConfig(
+	value: PlayerOptionsInput["ticket"],
+): PlayerTicketConfig | null {
+	if (!value || typeof value !== "object") return null;
+	const endpoint = normalizeEngineUrl(value.endpoint);
+	if (!endpoint) return null;
+	const hosts = normalizeRouteFilter(value.hosts)
+		.map((host) => host.toLowerCase())
+		.filter((host) => host.length > 0);
+	if (hosts.length === 0) return null;
+	return { endpoint, hosts: [...new Set(hosts)] };
 }
 
 function collectLabels(input: Partial<PlayerLabels> | undefined): {
@@ -113,6 +132,7 @@ export function resolvePlayerConfig(
 			diagnostics: input.diagnostics === true,
 			labels,
 			routeFilter: normalizeRouteFilter(input.routeFilter),
+			ticket: normalizeTicketConfig(input.ticket),
 		},
 	};
 }

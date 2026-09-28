@@ -72,6 +72,34 @@ test("resolvePlayerConfig fills defaults once the labels are complete", () => {
 	assert.equal(resolution.config.engineTimeoutMs, DEFAULT_ENGINE_TIMEOUT_MS);
 	assert.equal(resolution.config.diagnostics, false);
 	assert.deepEqual(resolution.config.routeFilter, []);
+	assert.equal(resolution.config.ticket, null);
+});
+
+test("resolvePlayerConfig normalizes the ticket route or drops it whole", () => {
+	const resolution = resolvePlayerConfig({
+		labels: FULL_LABELS,
+		ticket: {
+			endpoint: " /mp-ticket ",
+			hosts: ["CDN.Example.com", "cdn.example.com", "", 7],
+		},
+	});
+	assert.deepEqual(resolution.config.ticket, {
+		endpoint: "/mp-ticket",
+		hosts: ["cdn.example.com"],
+	});
+
+	for (const ticket of [
+		null,
+		undefined,
+		{},
+		{ endpoint: "/mp-ticket" },
+		{ hosts: ["cdn.example.com"] },
+		{ endpoint: "not a url", hosts: ["cdn.example.com"] },
+		{ endpoint: "/mp-ticket", hosts: [] },
+	]) {
+		const dropped = resolvePlayerConfig({ labels: FULL_LABELS, ticket });
+		assert.equal(dropped.config.ticket, null, JSON.stringify(ticket));
+	}
 });
 
 test("resolvePlayerConfig ignores an unknown engine preference", () => {

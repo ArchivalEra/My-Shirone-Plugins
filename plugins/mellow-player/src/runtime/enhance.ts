@@ -10,11 +10,17 @@
  */
 
 import type { MediaEngine } from "../engine/engine.js";
-import type { MellowPlayerModule } from "../engine/mellow.js";
 import { MellowMediaEngine } from "../engine/mellow.js";
 import { NativeMediaEngine } from "../engine/native.js";
 import { createOriginProbe } from "../engine/probe.js";
 import { chooseEngine, engineContainer } from "../engine/selection.js";
+import {
+	type Ticket,
+	TicketedEngine,
+	type TimerSchedule,
+	mintTicket,
+	needsTicket,
+} from "../engine/ticket.js";
 import { describeFailure } from "../format.js";
 import type { ResolvedPlayerConfig } from "../protocol/types.js";
 
@@ -55,6 +61,13 @@ export interface EnhanceDeps {
 	importEngineModule?: (url: string) => Promise<unknown>;
 	/** Injected so origin reachability is testable without a network. */
 	probeOrigin?: (src: string) => Promise<boolean>;
+	/** Injected so ticket minting is testable without a network. */
+	mintTicket?: (endpoint: string, src: string) => Promise<Ticket | null>;
+	/**
+	 * Injected so the ticketed engine's refresh timer never holds the process
+	 * open in tests; production uses `setTimeout`.
+	 */
+	scheduleTimer?: TimerSchedule;
 	/** Arms the on-approach callback. Defaults to an IntersectionObserver. */
 	armApproach?: (element: Element, run: () => void) => void;
 	/** Injected so mounting is observable without a Svelte runtime. */
@@ -198,15 +211,15 @@ async function defaultMountSurface(
  * element either way and must not spend a request finding that out.
  */
 async function resolveReadability(
-	target: ArtPlayerTarget,
+	effectiveSrc: string,
 	deps: EnhanceDeps,
 ): Promise<boolean> {
 	const { config } = deps;
 	if (config.engine === "native" || config.engineUrl === null) return false;
 	const matters =
-		config.engine === "mellow" || engineContainer(target.src) !== null;
+		config.engine === "mellow" || engineContainer(effectiveSrc) !== null;
 	if (!matters) return true;
-	return (deps.probeOrigin ?? probeOrigin)(target.src);
+	return (deps.probeOrigin ?? probeOrigin)(effectiveSrc);
 }
 
 async function mountTarget(
@@ -215,11 +228,27 @@ async function mountTarget(
 ): Promise<void> {
 	const { config } = deps;
 	const mellowAvailable = config.engineUrl !== null;
+	// Ticketing comes first, for the same reason the probe does: while the
+	// endpoint and the origin are being asked, the server-rendered player is
+	// still there and still usable. The signed URL then stands in for the
+	// bare source everywhere downstream — the probe included, because on a
+	// signed origin an unsigned probe would read as "unreadable" on any cold
+	// object.
+	let effectiveSrc = target.src;
+	let ticket: Ticket | null = null;
+	if (config.ticket && needsTicket(config.ticket, target.src)) {
+		ticket = await (deps.mintTicket ?? mintTicket)(
+			config.ticket.endpoint,
+			target.src,
+		);
+		if (ticket) effectiveSrc = ticket.url;
+		target.figure.dataset.mpTicket = ticket ? "ok" : "unavailable";
+	}
 	// Awaited before anything is hidden or replaced: while the origin is being
 	// asked, the server-rendered player is still there and still usable.
-	const mellowReadable = await resolveReadability(target, deps);
+	const mellowReadable = await resolveReadability(effectiveSrc, deps);
 	const choice = chooseEngine({
-		src: target.src,
+		src: effectiveSrc,
 		preference: config.engine,
 		mellowAvailable,
 		mellowReadable,
@@ -233,7 +262,7 @@ async function mountTarget(
 	target.figure.insertBefore(host, target.video);
 	target.video.hidden = true;
 
-	const engine =
+	const base =
 		choice.engine === "mellow" && config.engineUrl
 			? new MellowMediaEngine({
 					engineUrl: config.engineUrl,
@@ -241,6 +270,20 @@ async function mountTarget(
 					importModule: deps.importEngineModule,
 				})
 			: (deps.createNativeEngine?.() ?? new NativeMediaEngine());
+	// The wrapper owns the signed URL for the rest of the page's life: the
+	// surface keeps loading the original source and the wrapper maps it onto
+	// the current ticket, re-minting on its timer or a mid-play failure.
+	const endpoint = config.ticket?.endpoint ?? null;
+	const engine: MediaEngine =
+		ticket && endpoint
+			? new TicketedEngine(base, {
+					src: target.src,
+					ticket,
+					endpoint,
+					mint: (src) => (deps.mintTicket ?? mintTicket)(endpoint, src),
+					schedule: deps.scheduleTimer,
+				})
+			: base;
 
 	if (choice.engine === "mellow") {
 		// The element must stop fetching: the engine reads the same bytes over

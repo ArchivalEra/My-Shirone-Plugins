@@ -104,6 +104,35 @@ CI 里没有对方 checkout，所以这一步是空操作；主题的 `astro.con
 | `diagnostics` | `false` | 显示引擎徽标与有界请求审计面板 |
 | `labels` | — | 必填，见 `PlayerLabels` |
 | `routeFilter` | `[]` | 只在这些前缀下增强；空数组表示全站 |
+| `ticket` | `null` | 签名源取票路由 `{ endpoint, hosts }`；见下节 |
+
+---
+
+## 取票（signed reads，ADR-0027）
+
+源站启用内容签名后，未签名的字节读取会被拒——裸 CDN 地址只剩「边缘恰好热着」的时候能播。`ticket` 配置把这类源交给**每浏览会话现签**：
+
+```js
+mellowPlayer({
+	ticket: {
+		endpoint: "/mp-ticket",                 // 站点路径或绝对 URL，运营方运维、持有密钥
+		hosts: ["cdn-oracle.isui.ren"],         // 命中这些 host 的嵌入才取票
+	},
+});
+```
+
+运行时行为，全部自动：
+
+1. **取票先于一切**：嵌挂前 POST `endpoint`，签名 URL 随后顶替裸地址喂给可达性探测与引擎（签名源上，对裸地址探测会把「冷对象」误读成「不可读」）。取票失败只是静默退回裸地址，与没有取票能力时完全一致（`data-mp-ticket="unavailable"`）。
+2. **长会话续命**：票到期前 5 分钟由定时器重签；播放中引擎报错则重签并**续播一次**（回到最后已知位置）。刷新永远带着同一个 `session`——它由端点用自己发的 Cookie 钉住，客户端只负责同源发送凭据，绝不自造第二身份。
+3. **签名 URL 不出运行时**：表面与诊断面板看到的仍是原始地址；地址校验保证票指向与源相同的 host，票值也不进任何日志。
+
+**端点契约**（运营方按此实现，密钥只存在于端点侧，参考他们仓库的 `deploy/oracle/presign.py`）：
+
+- `POST <endpoint>`，请求体 `{"src": "<原始 CDN 地址>"}`，同源调用；
+- 校验 `src` 的 host 与对象前缀后，为其现签一张带 `session` 标记的预签名 URL；
+- `200` → `{"url": "<签名 URL>", "expiresAt": "<ISO 8601>"}` + `Cache-Control: no-store`；
+- 首次成功时下发会话 Cookie（`HttpOnly; Secure; SameSite=Lax`），此后重签靠它保持同一 `session`——预算按会话计，换 id 等于绕预算。
 
 ---
 
@@ -138,7 +167,7 @@ Vite 在任何动态 `import()` 外面包一层 `__vite__injectQuery(..., 'impor
 ## 自动化测试
 
 ```bash
-pnpm test                                  # 58 项：配置、选择策略、格式化、两个适配器、运行时、集成
+pnpm test                                  # 92 项：配置、选择策略、格式化、两个适配器、取票、运行时、集成
 MELLOW_ENGINE_BUNDLE=/path/to/mellow-player.js pnpm test   # 额外验证真实引擎产物契约
 ```
 
