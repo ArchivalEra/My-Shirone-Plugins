@@ -14,7 +14,7 @@ import type { MellowPlayerModule } from "../engine/mellow.js";
 import { MellowMediaEngine } from "../engine/mellow.js";
 import { NativeMediaEngine } from "../engine/native.js";
 import { createOriginProbe } from "../engine/probe.js";
-import { chooseEngine, matroskaExtension } from "../engine/selection.js";
+import { chooseEngine, engineContainer } from "../engine/selection.js";
 import { describeFailure } from "../format.js";
 import type { ResolvedPlayerConfig } from "../protocol/types.js";
 
@@ -193,9 +193,9 @@ async function defaultMountSurface(
 /**
  * Whether the bounded-range engine could read this source at all.
  *
- * Only asked when the answer can change the outcome — an embed that is not
- * Matroska, or a site with no engine configured, goes to the native element
- * either way and must not spend a request finding that out.
+ * Only asked when the answer can change the outcome — an embed the engine
+ * cannot demux, or a site with no engine configured, goes to the native
+ * element either way and must not spend a request finding that out.
  */
 async function resolveReadability(
 	target: ArtPlayerTarget,
@@ -204,8 +204,7 @@ async function resolveReadability(
 	const { config } = deps;
 	if (config.engine === "native" || config.engineUrl === null) return false;
 	const matters =
-		config.engine === "mellow" ||
-		matroskaExtension(target.src) !== null;
+		config.engine === "mellow" || engineContainer(target.src) !== null;
 	if (!matters) return true;
 	return (deps.probeOrigin ?? probeOrigin)(target.src);
 }

@@ -59,9 +59,20 @@ export interface MellowPlayerModule {
 	) => MellowPlayerLike;
 }
 
-/** Default module resolver: a runtime URL the bundler must leave alone. */
+/**
+ * Default module resolver: a runtime URL the bundler must leave alone.
+ *
+ * The specifier is assembled at run time rather than passed straight through,
+ * because Vite refuses to serve a `/public` asset that source code imports
+ * ("This file is in /public and will be copied as-is during build … should not
+ * be imported from source code"), which turned every engine load into a 500 in
+ * dev. A non-literal expression cannot be resolved statically, so the import is
+ * left to the browser — a plain fetch of the URL — in dev and in production
+ * alike, which is what the engine contract wants.
+ */
 export function importEngineModule(url: string): Promise<unknown> {
-	return import(/* @vite-ignore */ url);
+	const parts = [url];
+	return import(/* @vite-ignore */ parts.join(""));
 }
 
 /**

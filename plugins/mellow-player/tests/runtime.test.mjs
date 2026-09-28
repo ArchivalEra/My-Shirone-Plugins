@@ -156,7 +156,33 @@ test("a Matroska source is handed to the Mellow engine, and the element is silen
 	assert.equal(figure.inserted.className, "mp-host");
 });
 
-test("a non-Matroska source stays on the native engine with its source intact", async () => {
+test("a container the engine cannot demux stays native, untouched and unprobed", async () => {
+	installDocument();
+	const video = makeVideo({ src: "/videos/movie.flv" });
+	const figure = makeFigure(video);
+	const probed = [];
+	const { deps } = makeDeps({
+		probeOrigin: async (src) => {
+			probed.push(src);
+			return true;
+		},
+	});
+
+	enhanceArtPlayer(makeRoot([figure]), deps);
+	await settle();
+
+	assert.equal(figure.dataset.mpEngine, "native");
+	assert.equal(figure.dataset.mpEngineReason, "native-container");
+	assert.equal(video.hidden, true);
+	assert.equal(video.removedSrc, 0);
+	// The native element was always going to be chosen, so asking the origin
+	// whether the engine could read it would be a wasted request.
+	assert.deepEqual(probed, []);
+});
+
+test("MP4 now reaches the engine, and the origin is asked before it does", async () => {
+	// ADR-0002 added ISO BMFF and MPEG-TS demuxing upstream, so the container
+	// gate is no longer Matroska-only — this pins that the policy moved with it.
 	installDocument();
 	const video = makeVideo({ src: "/videos/movie.mp4" });
 	const figure = makeFigure(video);
@@ -171,13 +197,12 @@ test("a non-Matroska source stays on the native engine with its source intact", 
 	enhanceArtPlayer(makeRoot([figure]), deps);
 	await settle();
 
-	assert.equal(figure.dataset.mpEngine, "native");
-	assert.equal(figure.dataset.mpEngineReason, "non-matroska-source");
-	assert.equal(video.hidden, true);
-	assert.equal(video.removedSrc, 0);
-	// The native element was always going to be chosen, so asking the origin
-	// whether the engine could read it would be a wasted request.
-	assert.deepEqual(probed, []);
+	assert.equal(figure.dataset.mpEngine, "mellow");
+	assert.equal(figure.dataset.mpEngineReason, "mp4-source");
+	// A supported container means the probe is worth its request.
+	assert.deepEqual(probed, ["/videos/movie.mp4"]);
+	// The engine reads the bytes itself, so the element stops fetching.
+	assert.equal(video.removedSrc, 1);
 });
 
 test("an origin that refuses cross-origin reads keeps the native player", async () => {
@@ -252,7 +277,7 @@ test("`preload=auto` defers the mount until the embed is approached", async () =
 
 test("a failed mount restores the server-rendered element", async () => {
 	installDocument();
-	const video = makeVideo({ src: "/videos/movie.mp4" });
+	const video = makeVideo({ src: "/videos/movie.flv" });
 	const figure = makeFigure(video);
 	const released = [];
 	const { deps } = makeDeps({

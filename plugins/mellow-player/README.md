@@ -12,23 +12,23 @@ Shirone 的 `::artplayer` 语法原本只输出一个带 `controls` 的原生 `<
 
 | 引擎 | 适用容器 | 拿手的事 |
 | :--- | :--- | :--- |
-| `native` | 浏览器支持的一切（含 MP4） | 默认选择。零额外请求，`preload` 语义照旧 |
-| `mellow` | 仅 Matroska（`.mkv` / `.webm`） | 严格有界的 `bytes=A-B` 调度、Cues 二分寻址、WebCodecs 硬解、线路审计 |
+| `native` | 浏览器支持的一切 | 默认选择。零额外请求，`preload` 语义照旧 |
+| `mellow` | 引擎自己解复用的那些：Matroska/WebM（`.mkv`/`.webm`）、ISO BMFF（`.mp4`/`.m4v`/`.mov`）、MPEG-TS（`.ts`） | 严格有界的 `bytes=A-B` 调度、Cues 二分寻址、WebCodecs 硬解、线路审计 |
 
-默认策略 `engine: "auto"`：只有源是 Matroska 时才交给 Mellow。MP4 交给 Mellow 只会换来一句容器排他性错误。**容器之外还要看可达性**——Mellow 用 `fetch` 读媒体，而媒体元素不需要 CORS，所以一个源可以「能播但读不到」：云盘/对象存储当源站时这是常态。因此对一个本来要选 Mellow 的嵌入，运行时会先做一次**单字节有界 Range 探测**（`bytes=0-0`，按 origin 缓存，一页多个同源嵌入只探一次），只接受 `206`（`200` 意味着源站忽略了 Range、开始整片流式交付，Mellow 自己也会熔断拒收）。
+默认策略 `engine: "auto"`：源属于引擎能解复用的容器家族时才交给 Mellow（上游 ADR-0002 把容器支持从「Matroska 排他」扩到了通用嗅探，所以 MP4/MPEG-TS 现在也算；`.flv` 等仍被拒）。**容器之外还要看可达性**——Mellow 用 `fetch` 读媒体，而媒体元素不需要 CORS，所以一个源可以「能播但读不到」：云盘/对象存储当源站时这是常态。因此对一个本来要选 Mellow 的嵌入，运行时会先做一次**单字节有界 Range 探测**（`bytes=0-0`，按 origin 缓存，一页多个同源嵌入只探一次），只接受 `206`（`200` 意味着源站忽略了 Range、开始整片流式交付，Mellow 自己也会熔断拒收）。
 
 于是引擎选择有四种落点，原因都写在 `data-mp-engine-reason` 上：
 
 | 落点 | 原因 | 含义 |
 | :--- | :--- | :--- |
-| `mellow` | `matroska-source` | Matroska + 源站允许跨源读取 |
-| `mellow` | `forced-mellow` | 作者指定 |
-| `native` | `non-matroska-source` | 非 Matroska，容器不支持 |
+| `mellow` | `matroska-source` / `mp4-source` / `mpegts-source` | 容器属于引擎支持的那几族 + 源站允许跨源读取（后缀标明是哪一族） |
+| `mellow` | `forced-mellow` | 作者指定（后缀只是猜测，作者的话更可信，所以强制优先于容器判断） |
+| `native` | `native-container` | 引擎不解复用这个容器（如 `.flv`）或后缀无法识别 |
 | `native` | `mellow-unreadable` | 容器对但源站不给 CORS：退回原生，播放仍然可用 |
 | `native` | `mellow-unavailable` | 没配 `engineUrl`（或模块加载失败） |
 | `native` | `forced-native` | 作者指定 |
 
-探测只在「答案会改变结果」时发出：非 Matroska 的源、以及未配置引擎的站点，一律直接给原生，不会为此花掉一次请求。探测失败（跨源被拦、超时、非 206）都只是「不可读」，不是错误。
+探测只在「答案会改变结果」时发出：引擎不支持的容器、以及未配置引擎的站点，一律直接给原生，不会为此花掉一次请求。探测失败（跨源被拦、超时、非 206）都只是「不可读」，不是错误。
 
 ---
 
@@ -38,7 +38,7 @@ Shirone 的 `::artplayer` 语法原本只输出一个带 `controls` 的原生 `<
 
 1. **内联引导脚本**（每个页面，约 600 字节）：只做一件事——页面里存在 `figure[data-artplayer]` 时，才去 `import()` 运行时模块。没有嵌入的页面到此为止。
 2. **运行时 + 表面 + 适配器**（首次出现嵌入时）：接管 SSR 生成的 `<figure>`，把原生元素标记 `hidden`，挂载 Svelte 表面。此时仍未碰引擎。
-3. **引擎模块**（读者首次按下播放时）：`WebAssembly` 内核与解复用器共约 68 KB gzip，来自配置的 `engineUrl`。没按播放就永远不会请求。
+3. **引擎模块**（读者首次按下播放时）：`WebAssembly` 内核（含 32/64 位双架构）与三套解复用器共约 114 KB gzip，来自配置的 `engineUrl`。没按播放就永远不会请求——这也是它在 2026-09 那次上游更新里从约 68 KB 涨上来的原因，代价只落在按下播放之后。
 
 引擎绑定之前还会多一步：对本来要选 Mellow 的嵌入做一次单字节 Range 探测（见上节）。它在任何东西被隐藏或替换**之前**完成，所以源站在被问的这段时间里，服务端渲染的那个原生播放器还在、还能用。
 
@@ -118,6 +118,20 @@ CI 里没有对方 checkout，所以这一步是空操作；主题的 `astro.con
 ## 上游现状（`selectableRate: false`）
 
 `HeadlessPlayer` 目前没有对外暴露变速接口（`PlaybackPacer` 内部有），所以 Mellow 引擎声明 `selectableRate: false`，表面据此隐藏倍速按钮而不是展示一个按不动的控件；误调 `setRate()` 会抛出 `EngineCapabilityError`。上游补上之后，把能力表改成 `true` 即可。
+
+---
+
+## 已知限制：dev 下引擎模块会 500（Vite 的 public 规则）
+
+Vite 在任何动态 `import()` 外面包一层 `__vite__injectQuery(..., 'import')`，于是本地 dev 里去取 `/public` 下的引擎产物会变成 `…/mellow-player.js?import`，而 Vite 明确拒绝「源码 import 来的 public 文件」：
+
+> This file is in /public and will be copied as-is during build … should not be imported from source code.
+
+**这只影响 dev，生产不受影响**（生产构建里没有那层注入，浏览器直接按运行时 URL 取，已线上实测：引擎加载、4K 出帧、0 次开放式 Range）。三种处理方式，按需要挑：
+
+- dev 里把 `MELLOW_ENGINE_URL` 指向一个**绝对 URL**（部署好的引擎产物，或本地另起一个能带 CORS 的静态服务），Vite 就不会把它当 public 文件去解析；
+- 或者索性不配 `engineUrl`：嵌入退回原生播放器，dev 照常可用；
+- 生产部署由 `vendor-engine.mjs` 自动产出，不需要任何手工步骤。
 
 ---
 
