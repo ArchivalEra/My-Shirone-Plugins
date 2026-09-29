@@ -46,10 +46,23 @@ export default {
 		}
 
 		// 1. Health Probe
-		if (pathname === "/health" && method === "GET") {
-			return jsonResponse({ ok: true, timestamp: Date.now() }, 200, {
-				"Cache-Control": "no-store",
-			});
+		if (
+			(pathname === "/health" ||
+				pathname === "/activity/health" ||
+				pathname === "/api/activity/health") &&
+			method === "GET"
+		) {
+			return jsonResponse(
+				{
+					ok: true,
+					timestamp: Date.now(),
+					headers: Object.fromEntries(request.headers.entries()),
+				},
+				200,
+				{
+					"Cache-Control": "no-store",
+				},
+			);
 		}
 
 		// Ensure Cloudflare D1 database binding
@@ -155,6 +168,28 @@ export default {
 				pathname === "/api/activity/report") &&
 			method === "POST"
 		) {
+			// Security guard: telemetry ingestion is strictly forbidden via public CDN (EdgeOne / isui.ren)
+			const host = (request.headers.get("host") || "").toLowerCase();
+			const fwdHost = (
+				request.headers.get("x-forwarded-host") || ""
+			).toLowerCase();
+			const hasEdgeOneHeader = Array.from(request.headers.keys()).some(
+				(k) =>
+					k.startsWith("eo-") ||
+					k.startsWith("x-eo-") ||
+					k.startsWith("x-edgeone"),
+			);
+			if (
+				host.includes("isui.ren") ||
+				fwdHost.includes("isui.ren") ||
+				hasEdgeOneHeader
+			) {
+				return errorResponse(
+					"Telemetry reporting via public CDN / EdgeOne is strictly forbidden. Please connect directly to api.mango-mesa.ccwu.cc or through Cloudflare Tunnel.",
+					403,
+				);
+			}
+
 			const authHeader = request.headers.get("authorization") || "";
 			const match = authHeader.match(/^Bearer\s+(.+)$/i);
 			const bearerToken = match ? match[1].trim() : "";
@@ -185,6 +220,27 @@ export default {
 				pathname === "/api/origin-cache/report") &&
 			method === "POST"
 		) {
+			const host = (request.headers.get("host") || "").toLowerCase();
+			const fwdHost = (
+				request.headers.get("x-forwarded-host") || ""
+			).toLowerCase();
+			const hasEdgeOneHeader = Array.from(request.headers.keys()).some(
+				(k) =>
+					k.startsWith("eo-") ||
+					k.startsWith("x-eo-") ||
+					k.startsWith("x-edgeone"),
+			);
+			if (
+				host.includes("isui.ren") ||
+				fwdHost.includes("isui.ren") ||
+				hasEdgeOneHeader
+			) {
+				return errorResponse(
+					"Telemetry reporting via public CDN / EdgeOne is strictly forbidden. Please connect directly to api.mango-mesa.ccwu.cc or through Cloudflare Tunnel.",
+					403,
+				);
+			}
+
 			let body;
 			try {
 				body = await request.json();
