@@ -11,9 +11,9 @@
 
 ### 1.1 为什么必须封禁 EdgeOne 端点的上报请求？
 * **安全红线**：国内 CDN（腾讯云 EdgeOne / 阿里云 ESA）是公开的博客静态站点加速层。如果允许任何客户端向 `isui.ren/api/activity/report` 投递上报，公网扫描器或恶意访客就能随意滥刷遥测接口、污染设备舰队数据或耗尽后端 D1 配额。
-* **分权架构**：
-  * **公网只读（EdgeOne）**：仅开放 `GET /api/activity`，供全球读者以超低延迟查看当前博客主人的状态，后端由 EdgeOne 缓存保护（`max-age=5, s-maxage=10`）。
-  * **私网/专用写入（Worker + Tunnel）**：上报接口 `POST /activity/report` 仅在 Cloudflare 专用 API 端点 `api.mango-mesa.ccwu.cc` 接收。Worker 内部硬编码拦截规则：**凡带有 EdgeOne 标识（如 `Host: isui.ren`、`eo-*`、`x-edgeone-*`）的上报请求，一律直接返回 `403 Forbidden` 绝不入库**。
+* **分权架构（最简也是最彻底的实现：直接只允许 GET）**：
+  * **公网只读（EdgeOne 反代规则：只开放 GET）**：在 EdgeOne 上对 `/api/activity` 仅放行 `GET` 方法反代到 Worker 的 `/activity`。EdgeOne 自身直接拒绝任何 POST/PUT 方法（405 或 403 阻断在腾讯 CDN 边缘），根本无需在 Worker 里面编写脆弱臃肿的 CDN 请求头嗅探逻辑。
+  * **私网/专用写入（Worker + Tunnel）**：上报接口 `POST /activity/report` 仅在 Cloudflare 专用 API 端点 `api.mango-mesa.ccwu.cc` 接收，要求必须携带有效的 Cloudflare Tunnel Token 或设备 Token。
 
 ```
 [设备探针 (Linux KDE/GNOME/Server)]
@@ -27,9 +27,9 @@
        └─ (4) 写入 Cloudflare D1 (what-im-doing-fleet)
                │
                ▼
-[EdgeOne 国内 CDN (isui.ren/api/activity)]  ◄─── 读者只读拉取 (GET 5s 缓存)
+[EdgeOne 国内 CDN (isui.ren/api/activity)]  ◄─── 读者只读拉取 (只放行 GET，5s 缓存)
    ▲
-   └─── 严禁写入！(POST 上报直接 403 熔断)
+   └─── 严禁写入！(EdgeOne 层面直接拒收 POST / 无写入反代)
 ```
 
 ### 1.2 为什么直连 Cloudflare Anycast 会被重置？

@@ -563,63 +563,20 @@ test("Cloudflare Worker + D1: Native Cloudflare Tunnel Token Auto-Enrollment & I
 	assert.equal(adminData.devices.length, 1);
 });
 
-test("Cloudflare Worker + D1: Reject Telemetry Reporting via EdgeOne / Public CDN", async () => {
+test("Cloudflare Worker + D1: /activity Reader Endpoint is GET-only", async () => {
 	const db = new MockD1Database();
 	const env = { DB: db };
 
-	const validTunnelPayload = {
-		a: "9bd2e738536b0a16b01635ab14ea9503",
-		t: "1ee9a5e5-0acc-47aa-9de8-78a09cd964ba",
-		s: "sampleSecretKey123",
-	};
-	const validTunnelToken = Buffer.from(
-		JSON.stringify(validTunnelPayload),
-	).toString("base64");
+	// 1. GET /activity returns 200 OK
+	const getReq = new Request("http://localhost/activity", { method: "GET" });
+	const getRes = await worker.fetch(getReq, env);
+	assert.equal(getRes.status, 200);
 
-	// 1. Report with Host: isui.ren -> 403 Forbidden
-	const edgeOneHostReq = new Request("https://isui.ren/activity/report", {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-			Authorization: `Bearer ${validTunnelToken}`,
-			Host: "isui.ren",
-		},
-		body: JSON.stringify({
-			id: "debiansid",
-			appName: "test",
-		}),
-	});
-	const edgeOneHostRes = await worker.fetch(edgeOneHostReq, env);
-	assert.equal(edgeOneHostRes.status, 403);
-	const edgeOneHostData = await edgeOneHostRes.json();
-	assert.ok(edgeOneHostData.error.includes("strictly forbidden"));
-
-	// 2. Report with eo-client-ip or eo headers -> 403 Forbidden
-	const edgeOneHeaderReq = new Request("https://api.mango-mesa.ccwu.cc/activity/report", {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-			Authorization: `Bearer ${validTunnelToken}`,
-			"eo-client-ip": "1.2.3.4",
-			"x-edgeone-request-id": "eo-test-123",
-		},
-		body: JSON.stringify({
-			id: "debiansid",
-			appName: "test",
-		}),
-	});
-	const edgeOneHeaderRes = await worker.fetch(edgeOneHeaderReq, env);
-	assert.equal(edgeOneHeaderRes.status, 403);
-
-	// 3. GET /activity via EdgeOne / isui.ren is ALLOWED (public readers can view)
-	const publicGetReq = new Request("https://isui.ren/activity", {
-		method: "GET",
-		headers: {
-			Host: "isui.ren",
-		},
-	});
-	const publicGetRes = await worker.fetch(publicGetReq, env);
-	assert.equal(publicGetRes.status, 200);
+	// 2. POST /activity is not a valid reader endpoint (falls through to 404 / method not supported)
+	const postReq = new Request("http://localhost/activity", { method: "POST" });
+	const postRes = await worker.fetch(postReq, env);
+	assert.equal(postRes.status, 404);
 });
+
 
 
