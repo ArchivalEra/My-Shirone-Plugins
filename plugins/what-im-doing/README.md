@@ -168,40 +168,61 @@ If `playerctl` is available on your desktop, `collector/what-im-doing.sh` automa
 ```
 The status capsule dynamically formats: *"正在 Arch Linux 收听 海阔天空 - Beyond"* when music is playing, or *"正在 Arch Linux 使用 Antigravity"* when working.
 
-### Multi-Device Setup (Workstation + Laptop)
+### 设备注册与舰队入网 (Machine Registration & Fleet Enrollment)
 
-Both machines can report concurrently. The Hub's arbiter ensures the machine you are actively touching takes precedence.
+每台新机器加入舰队均需要一个高熵设备凭证（`sk_dev_...`）。系统提供多种便捷的注册入网途径：
 
-Create `~/.config/what-im-doing.conf` on each machine:
-
-**On Workstation:**
+#### 途径一：一键全自动入网安装（推荐，真正一行命令）
+在目标 Linux 机器上，提供管理员密钥直接完成「注册 + 写入配置 + 启动后台系统服务」：
 ```bash
-ENDPOINT="https://activity.your-domain.com/api/activity"
-AUTH_TOKEN="your-secret-token"
-DEVICE_ID="workstation"
-DEVICE_NAME="Arch Linux (Workstation)"
-INTERVAL=15
+bash collector/install.sh \
+  --hub https://api.mango-mesa.ccwu.cc \
+  --admin-key "your-admin-secret"
+```
+脚本会自动探测该机器的主机名、硬件型号（如 `ThinkPad X1 Carbon` 或 `HP ProBook 440 G6`）与设备类型（`desktop` / `laptop` / `server`），向 Hub 申请 Token，生成 `~/.config/what-im-doing.json` 并启动 systemd 用户服务。
+
+#### 途径二：纯 Shell 独立注册脚本 (`collector/register-device.sh`)
+仅完成机器登记并写入本地配置，不立即启动后台服务：
+```bash
+bash collector/register-device.sh \
+  --hub https://api.mango-mesa.ccwu.cc \
+  --admin-key "your-admin-secret" \
+  --name "Debian 13 开发工作站" \
+  --type desktop
+```
+注册成功后，配置文件保存在 `~/.config/what-im-doing.json`（权限严格限定为 `0600`）。后续可使用 `bash collector/install.sh` 安装或 `bash collector/what-im-doing.sh --dry-run` 调试。
+
+#### 途径三：Node.js 跨平台注册工具
+```bash
+node collector/register-device.mjs \
+  --hub https://api.mango-mesa.ccwu.cc \
+  --admin-key "your-admin-secret"
 ```
 
-**On Laptop:**
+#### 途径四：标准 REST API / curl 注册
 ```bash
-ENDPOINT="https://activity.your-domain.com/api/activity"
-AUTH_TOKEN="your-secret-token"
-DEVICE_ID="laptop"
-DEVICE_NAME="ThinkPad (Laptop)"
-INTERVAL=15
+curl -X POST https://api.mango-mesa.ccwu.cc/admin/devices \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <YOUR_ADMIN_KEY>" \
+  -d '{"id":"workstation","name":"Arch Linux 工作站","type":"desktop"}'
+```
+返回：
+```json
+{
+  "ok": true,
+  "device": {
+    "id": "workstation",
+    "name": "Arch Linux 工作站",
+    "type": "desktop",
+    "token": "sk_dev_a8f9c0e21b74"
+  }
+}
 ```
 
-### Enable as User Systemd Service
+#### 途径五：Web 可视化纳管后台
+在浏览器访问 `https://your-hub.workers.dev/admin`（推荐置于 Cloudflare Access 之后），直接在卡片式 UI 中录入新设备并导出配置文件。
 
-```bash
-mkdir -p ~/.config/systemd/user ~/.local/bin
-cp collector/what-im-doing.sh ~/.local/bin/
-cp collector/what-im-doing.service ~/.config/systemd/user/
-
-systemctl --user daemon-reload
-systemctl --user enable --now what-im-doing.service
-```
+---
 
 ---
 

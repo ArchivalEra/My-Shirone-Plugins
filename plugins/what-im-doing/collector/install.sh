@@ -14,6 +14,8 @@ SERVICE_FILE="${SYSTEMD_USER_DIR}/what-im-doing.service"
 
 # Defaults
 ENDPOINT=""
+HUB_URL=""
+ADMIN_KEY=""
 DEVICE_ID="$(hostname | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')"
 DEVICE_NAME="$(hostname) (Linux)"
 DEVICE_TYPE="desktop"
@@ -32,7 +34,9 @@ Usage:
   bash install.sh [OPTIONS]
 
 Options:
-  --endpoint <URL>     Cloudflare Worker endpoint (e.g. https://activity.example.com/api/activity/report)
+  --endpoint <URL>     Cloudflare Worker endpoint (e.g. https://api.mango-mesa.ccwu.cc/activity/report)
+  --hub <URL>          Hub base URL (e.g. https://api.mango-mesa.ccwu.cc, used with --admin-key)
+  --admin-key <KEY>    Admin key for automatic device enrollment (generates --token automatically)
   --id <ID>            Unique device identifier (default: hostname, e.g. debian-desktop)
   --name <NAME>        Human-readable device name (default: hostname (Linux))
   --type <TYPE>        Device type: desktop | laptop | server | mobile | other (default: desktop)
@@ -44,9 +48,15 @@ Options:
   --dry-run            Simulate operations without modifying filesystem
   --help               Display this help message
 
-Example:
+Examples:
+  # Method 1: Automatic enrollment and installation via Admin Key
   bash install.sh \\
-    --endpoint https://activity.example.com/api/activity/report \\
+    --hub https://api.mango-mesa.ccwu.cc \\
+    --admin-key "your-admin-secret"
+
+  # Method 2: Manual installation with pre-registered Device Token
+  bash install.sh \\
+    --endpoint https://api.mango-mesa.ccwu.cc/activity/report \\
     --id debian-desktop \\
     --name "Debian 13 开发工作站" \\
     --type desktop \\
@@ -58,6 +68,8 @@ EOF
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --endpoint) ENDPOINT="$2"; shift 2 ;;
+        --hub) HUB_URL="$2"; shift 2 ;;
+        --admin-key) ADMIN_KEY="$2"; shift 2 ;;
         --id) DEVICE_ID="$2"; shift 2 ;;
         --name) DEVICE_NAME="$2"; shift 2 ;;
         --type) DEVICE_TYPE="$2"; shift 2 ;;
@@ -84,6 +96,40 @@ if [[ "$UNINSTALL" == true ]]; then
     echo "==> Removed service and binaries. Preserving config at $CONFIG_FILE."
     echo "==> Done."
     exit 0
+fi
+
+# Auto-enrollment via Admin Key if token is missing
+if [[ -z "$TOKEN" && -n "$ADMIN_KEY" ]]; then
+    target_hub="${HUB_URL:-$ENDPOINT}"
+    if [[ -z "$target_hub" ]]; then
+        echo "Error: --hub <URL> or --endpoint <URL> is required when using --admin-key." >&2
+        exit 1
+    fi
+    echo "==> Enrolling device automatically using register-device.sh..."
+    reg_cmd=(bash "${SCRIPT_DIR}/register-device.sh"
+        --hub "$target_hub"
+        --admin-key "$ADMIN_KEY"
+        --id "$DEVICE_ID"
+        --name "$DEVICE_NAME"
+        --type "$DEVICE_TYPE"
+        --config "$CONFIG_FILE"
+    )
+    [[ -n "$CF_CLIENT_ID" ]] && reg_cmd+=(--cf-id "$CF_CLIENT_ID")
+    [[ -n "$CF_CLIENT_SECRET" ]] && reg_cmd+=(--cf-secret "$CF_CLIENT_SECRET")
+    [[ "$DRY_RUN" == true ]] && reg_cmd+=(--dry-run)
+
+    "${reg_cmd[@]}"
+
+    if [[ "$DRY_RUN" == true ]]; then
+        echo "==> [Dry-Run] Registration simulated. Exiting."
+        exit 0
+    fi
+
+    # Read back token & endpoint from generated config file
+    if [[ -f "$CONFIG_FILE" ]]; then
+        TOKEN=$(grep -o '"token"[[:space:]]*:[[:space:]]*"[^"]*"' "$CONFIG_FILE" | head -n 1 | sed -E 's/"token"[[:space:]]*:[[:space:]]*"([^"]*)"/\1/' || true)
+        ENDPOINT=$(grep -o '"endpoint"[[:space:]]*:[[:space:]]*"[^"]*"' "$CONFIG_FILE" | head -n 1 | sed -E 's/"endpoint"[[:space:]]*:[[:space:]]*"([^"]*)"/\1/' || true)
+    fi
 fi
 
 # Validation

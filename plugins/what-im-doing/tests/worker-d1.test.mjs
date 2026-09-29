@@ -390,3 +390,54 @@ test("Cloudflare Worker + D1: Origin Cache Watchdog Telemetry & 15m Timeout", as
 	assert.equal(sixteenMinDev.offline, true); // Offline at 16 minutes!
 });
 
+test("Cloudflare Worker + D1: /activity and /activity/report Route Aliases", async () => {
+	const db = new MockD1Database();
+	const env = { DB: db, ADMIN_KEY: "admin_secret" };
+
+	// 1. Register device via admin API
+	const regReq = new Request("http://localhost/admin/devices", {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Authorization: "Bearer admin_secret",
+		},
+		body: JSON.stringify({
+			id: "laptop-node",
+			name: "Laptop Node",
+			type: "laptop",
+		}),
+	});
+	const regRes = await worker.fetch(regReq, env);
+	assert.equal(regRes.status, 200);
+	const { device } = await regRes.json();
+	assert.ok(device.token.startsWith("sk_dev_"));
+
+	// 2. Report activity using /activity/report (without /api prefix)
+	const reportReq = new Request("http://localhost/activity/report", {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Authorization: `Bearer ${device.token}`,
+		},
+		body: JSON.stringify({
+			id: "laptop-node",
+			appName: "Neovim",
+			windowTitle: "worker.js",
+			idleSeconds: 0,
+		}),
+	});
+	const reportRes = await worker.fetch(reportReq, env);
+	assert.equal(reportRes.status, 200);
+	const reportData = await reportRes.json();
+	assert.equal(reportData.ok, true);
+
+	// 3. Query telemetry using GET /activity (without /api prefix)
+	const getReq = new Request("http://localhost/activity");
+	const getRes = await worker.fetch(getReq, env);
+	assert.equal(getRes.status, 200);
+	const snapshot = await getRes.json();
+	assert.equal(snapshot.current.id, "laptop-node");
+	assert.equal(snapshot.current.appName, "Neovim");
+	assert.equal(snapshot.devices.length, 1);
+});
+

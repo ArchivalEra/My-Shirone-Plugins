@@ -127,8 +127,12 @@ export default {
 			}
 		}
 
-		// 6. Public Telemetry Reporting: POST /api/activity/report
-		if (pathname === "/api/activity/report" && method === "POST") {
+		// 6. Public Telemetry Reporting: POST /activity/report or /api/activity/report
+		if (
+			(pathname === "/activity/report" ||
+				pathname === "/api/activity/report") &&
+			method === "POST"
+		) {
 			const authHeader = request.headers.get("authorization") || "";
 			const match = authHeader.match(/^Bearer\s+(.+)$/i);
 			const bearerToken = match ? match[1].trim() : "";
@@ -151,9 +155,11 @@ export default {
 			}
 		}
 
-		// 6b. Origin-Cache Telemetry: POST /api/activity/origin-cache or /api/origin-cache/report
+		// 6b. Origin-Cache Telemetry: POST /activity/origin-cache or /api/activity/origin-cache or /api/origin-cache/report
 		if (
-			(pathname === "/api/activity/origin-cache" ||
+			(pathname === "/activity/origin-cache" ||
+				pathname === "/api/activity/origin-cache" ||
+				pathname === "/origin-cache/report" ||
 				pathname === "/api/origin-cache/report") &&
 			method === "POST"
 		) {
@@ -175,8 +181,11 @@ export default {
 			}
 		}
 
-		// 7. Public Telemetry Consumer: GET /api/activity
-		if (pathname === "/api/activity" && method === "GET") {
+		// 7. Public Telemetry Consumer: GET /activity or /api/activity
+		if (
+			(pathname === "/activity" || pathname === "/api/activity") &&
+			method === "GET"
+		) {
 			const isBrief = url.searchParams.get("brief") === "1";
 			try {
 				const snapshot = await store.getSnapshot(isBrief);

@@ -80,11 +80,22 @@ Overseas Cloudflare IPs encounter TLS SNI reset and ECH handshake drops in mainl
 
 Deploy the lightweight shell collector on target client machines (Linux KDE / Wayland / desktop):
 
-1. Copy `plugins/what-im-doing/collector/what-im-doing.sh` to `~/.local/bin/what-im-doing.sh` and make it executable (`chmod +x`).
-2. Follow [references/hub-and-collector.md#3-client-collector-setup-linux-kde--wayland](references/hub-and-collector.md#3-client-collector-setup-linux-kde--wayland) to configure `~/.config/what-im-doing.json` with the device token and endpoint.
-3. Install the systemd user service and timer for periodic 5-second sampling.
+1. **Automatic Registration & Install (Recommended)**:
+   ```bash
+   bash plugins/what-im-doing/collector/install.sh \
+     --hub https://api.mango-mesa.ccwu.cc \
+     --admin-key "your-admin-secret"
+   ```
+2. **Or Standalone Registration**:
+   ```bash
+   bash plugins/what-im-doing/collector/register-device.sh \
+     --hub https://api.mango-mesa.ccwu.cc \
+     --admin-key "your-admin-secret"
+   ```
+   Followed by `bash plugins/what-im-doing/collector/install.sh`.
+3. Follow [references/hub-and-collector.md#3-client-collector-setup-linux-kde--wayland](references/hub-and-collector.md#3-client-collector-setup-linux-kde--wayland) for manual probe fine-tuning.
 
-**Completion criterion**: Running `~/.local/bin/what-im-doing.sh` manually prints a successful HTTP 200 report acknowledgment without errors.
+**Completion criterion**: Running `~/.local/bin/what-im-doing.sh --dry-run` or `--once` prints a successful HTTP 200 report acknowledgment without errors.
 
 ---
 

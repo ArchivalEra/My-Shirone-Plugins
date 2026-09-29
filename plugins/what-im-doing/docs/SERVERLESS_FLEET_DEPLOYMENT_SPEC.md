@@ -91,8 +91,8 @@ CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen);
 
 ## 4. 接口协议与通信契约
 
-### 4.1 设备遥测上报：`POST /api/activity/report`
-设备端探针向服务端推送最新状态。
+### 4.1 设备遥测上报：`POST /activity/report` 或 `POST /api/activity/report`
+设备端探针向服务端推送最新状态（双路由别名完全等价支持）。
 
 * **请求头**：
   * `Content-Type: application/json`
@@ -119,8 +119,8 @@ CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen);
 
 ---
 
-### 4.2 公开聚合读取：`GET /api/activity`
-博客页面或外部小挂件读取全设备矩阵与当前状态。
+### 4.2 公开聚合读取：`GET /activity` 或 `GET /api/activity`
+博客页面或外部小挂件读取全设备矩阵与当前状态（双路由别名完全等价支持）。
 
 * **参数**：`?brief=1`（可选，开启后仅返回 `current` 摘要以节省流量）
 * **跨域**：支持所有域（`Access-Control-Allow-Origin: *`）
