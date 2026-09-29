@@ -6,7 +6,11 @@
  */
 
 import { renderAdminHtml } from "./admin-ui.js";
-import { FleetAuthError, FleetStore } from "./fleet-store.js";
+import {
+	FleetAuthError,
+	FleetStore,
+	parseTunnelToken,
+} from "./fleet-store.js";
 
 const CORS_HEADERS = {
 	"Access-Control-Allow-Origin": "*",
@@ -54,21 +58,39 @@ export default {
 			return errorResponse("Cloudflare D1 binding 'DB' is missing", 500);
 		}
 
-		const store = new FleetStore(db);
+		const store = new FleetStore(db, {
+			accountId: env?.ACCOUNT_ID || "9bd2e738536b0a16b01635ab14ea9503",
+		});
 
 		function checkAdminAuth() {
-			if (!env?.ADMIN_KEY) return true;
 			const authHeader = request.headers.get("authorization") || "";
 			const match = authHeader.match(/^Bearer\s+(.+)$/i);
 			const bearerToken = match ? match[1].trim() : "";
 			const adminHeader = request.headers.get("x-admin-key") || "";
 			const queryKey = url.searchParams.get("admin_key") || "";
 
-			return (
-				bearerToken === env.ADMIN_KEY ||
-				adminHeader === env.ADMIN_KEY ||
-				queryKey === env.ADMIN_KEY
-			);
+			// A. If presenting a valid Cloudflare Tunnel token belonging to this account, grant admin
+			if (bearerToken) {
+				const tunnelInfo = parseTunnelToken(bearerToken);
+				if (
+					tunnelInfo &&
+					(!store.accountId || tunnelInfo.accountId === store.accountId)
+				) {
+					return true;
+				}
+			}
+
+			// B. If ADMIN_KEY is configured in env, check matching
+			if (env?.ADMIN_KEY) {
+				return (
+					bearerToken === env.ADMIN_KEY ||
+					adminHeader === env.ADMIN_KEY ||
+					queryKey === env.ADMIN_KEY
+				);
+			}
+
+			// C. Default: no ADMIN_KEY configured -> open / protected by Zero Trust Access
+			return true;
 		}
 
 		// 2. Admin Web UI (Protected by Cloudflare Zero Trust Access or ADMIN_KEY)

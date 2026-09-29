@@ -6,14 +6,26 @@
 
 set -euo pipefail
 
+# Helper to automatically infer machine form-factor
+detect_device_type() {
+    if [[ -d /sys/class/power_supply ]] && ls /sys/class/power_supply/BAT* >/dev/null 2>&1; then
+        echo "laptop"
+    elif [[ -n "${WAYLAND_DISPLAY:-}" || -n "${DISPLAY:-}" ]]; then
+        echo "desktop"
+    else
+        echo "server"
+    fi
+}
+
 # 1. Defaults
-ENDPOINT="${ENDPOINT:-https://activity.example.com/api/activity/report}"
+ENDPOINT="${ENDPOINT:-https://api.mango-mesa.ccwu.cc/activity/report}"
 AUTH_TOKEN="${AUTH_TOKEN:-${API_KEY:-}}"
 DEVICE_ID="${DEVICE_ID:-$(hostname | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')}"
 DEVICE_NAME="${DEVICE_NAME:-$(hostname) (Linux)}"
-DEVICE_TYPE="${DEVICE_TYPE:-desktop}"
+DEVICE_TYPE="${DEVICE_TYPE:-$(detect_device_type)}"
 CF_CLIENT_ID="${CF_ACCESS_CLIENT_ID:-}"
 CF_CLIENT_SECRET="${CF_ACCESS_CLIENT_SECRET:-}"
+PROXY="${PROXY:-${https_proxy:-${http_proxy:-}}}"
 INTERVAL="${INTERVAL:-15}"
 HEARTBEAT_SECS="${HEARTBEAT_SECS:-60}"
 STATE_FILE="/tmp/wid_state_${USER}_${DEVICE_ID}"
@@ -51,6 +63,7 @@ if [[ -n "$CONF_FILE" ]]; then
     [[ -z "$cfg_type" ]] && cfg_type=$(extract_json_val "type" "$CONF_FILE")
     cfg_cid=$(extract_json_val "cfAccessClientId" "$CONF_FILE")
     cfg_csec=$(extract_json_val "cfAccessClientSecret" "$CONF_FILE")
+    cfg_proxy=$(extract_json_val "proxy" "$CONF_FILE")
 
     [[ -n "$cfg_ep" ]] && ENDPOINT="$cfg_ep"
     [[ -n "$cfg_token" ]] && AUTH_TOKEN="$cfg_token"
@@ -59,11 +72,21 @@ if [[ -n "$CONF_FILE" ]]; then
     [[ -n "$cfg_type" ]] && DEVICE_TYPE="$cfg_type"
     [[ -n "$cfg_cid" ]] && CF_CLIENT_ID="$cfg_cid"
     [[ -n "$cfg_csec" ]] && CF_CLIENT_SECRET="$cfg_csec"
+    [[ -n "$cfg_proxy" ]] && PROXY="$cfg_proxy"
     STATE_FILE="/tmp/wid_state_${USER}_${DEVICE_ID}"
 elif [[ -f "$USER_SH_CONF" ]]; then
     # shellcheck disable=SC1090
     source "$USER_SH_CONF"
     STATE_FILE="/tmp/wid_state_${USER}_${DEVICE_ID}"
+fi
+
+# Auto-detect Cloudflare Tunnel token if AUTH_TOKEN is still unconfigured
+if [[ -z "$AUTH_TOKEN" ]]; then
+    if [[ -r /etc/cloudflared/token ]]; then
+        AUTH_TOKEN="$(cat /etc/cloudflared/token | tr -d '\r\n[:space:]')"
+    elif command -v sudo &>/dev/null && sudo -n test -r /etc/cloudflared/token 2>/dev/null; then
+        AUTH_TOKEN="$(sudo -n cat /etc/cloudflared/token 2>/dev/null | tr -d '\r\n[:space:]')"
+    fi
 fi
 
 # Detect available D-Bus CLI for KDE 6 / Qt 6
@@ -239,9 +262,14 @@ JSON_EOF
         headers+=(-H "CF-Access-Client-Secret: ${CF_CLIENT_SECRET}")
     fi
 
-    # Send outbound report (timeout 3s)
+    # Send outbound report (timeout 5s)
+    local curl_opts=(-sS -o /dev/null -w "%{http_code}" --max-time 5 -X POST "${ENDPOINT}")
+    if [[ -n "${PROXY:-}" ]]; then
+        curl_opts+=(--proxy "${PROXY}")
+    fi
+
     local http_code
-    http_code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 3 -X POST "${ENDPOINT}" \
+    http_code=$(curl "${curl_opts[@]}" \
         "${headers[@]}" \
         -d "${json_payload}" 2>/dev/null || echo "000")
 

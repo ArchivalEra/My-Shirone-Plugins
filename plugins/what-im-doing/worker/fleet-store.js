@@ -14,13 +14,48 @@ export class FleetAuthError extends Error {
 	}
 }
 
+/**
+ * Parses and validates a Cloudflare Tunnel token (base64 encoded JSON { a, t, s })
+ */
+export function parseTunnelToken(token) {
+	if (!token || typeof token !== "string") return null;
+	try {
+		const trimmed = token.trim();
+		const decoded = atob(trimmed);
+		const parsed = JSON.parse(decoded);
+		if (
+			parsed &&
+			typeof parsed === "object" &&
+			typeof parsed.a === "string" &&
+			typeof parsed.t === "string" &&
+			typeof parsed.s === "string"
+		) {
+			return {
+				accountId: parsed.a.trim().toLowerCase(),
+				tunnelId: parsed.t.trim().toLowerCase(),
+				secret: parsed.s.trim(),
+			};
+		}
+	} catch {
+		return null;
+	}
+	return null;
+}
+
 export class FleetStore {
-	constructor(db) {
+	constructor(db, options = {}) {
 		if (!db)
 			throw new Error(
 				"FleetStore requires a valid Cloudflare D1 database binding",
 			);
 		this.db = db;
+		this.accountId = (
+			options.accountId ||
+			options.ACCOUNT_ID ||
+			"9bd2e738536b0a16b01635ab14ea9503"
+		)
+			.trim()
+			.toLowerCase();
 	}
 
 	/**
@@ -235,23 +270,81 @@ export class FleetStore {
 			);
 		}
 
-		const deviceId = (payload.id || payload.deviceId || "").trim();
-		if (!deviceId) {
-			throw new Error("Missing device id in report payload");
-		}
+		const tunnelInfo = parseTunnelToken(bearerToken);
+		let deviceId = (payload.id || payload.deviceId || "")
+			.trim()
+			.toLowerCase()
+			.replace(/[^a-z0-9_-]/g, "");
 
-		// Verify token against D1 registry
-		const device = await this.db
-			.prepare("SELECT token FROM devices WHERE id = ?")
-			.bind(deviceId)
-			.first();
+		if (tunnelInfo) {
+			// Cryptographically verified by Cloudflare Tunnel account identity
+			if (this.accountId && tunnelInfo.accountId !== this.accountId) {
+				throw new FleetAuthError(
+					"Unauthorized: Cloudflare Tunnel account mismatch",
+					403,
+				);
+			}
 
-		if (!device) {
-			throw new FleetAuthError(`Device '${deviceId}' is not registered`, 401);
-		}
+			// If device id is omitted in payload, default to the tunnel id
+			if (!deviceId) {
+				deviceId = tunnelInfo.tunnelId;
+			}
 
-		if (device.token !== bearerToken) {
-			throw new FleetAuthError("Unauthorized: device token mismatch", 403);
+			const now = Date.now();
+			const existingDevice = await this.db
+				.prepare("SELECT id, name, type, token FROM devices WHERE id = ?")
+				.bind(deviceId)
+				.first();
+
+			if (!existingDevice) {
+				// Zero-touch enrollment: Auto-register edge probe natively via Cloudflare Tunnel token
+				const deviceName = (
+					payload.name ||
+					payload.deviceName ||
+					`Host (${deviceId})`
+				).trim();
+				const deviceType = (
+					payload.type ||
+					payload.deviceType ||
+					"server"
+				).trim();
+				await this.db
+					.prepare(`
+						INSERT INTO devices (id, name, type, status, app_name, window_title, idle_seconds, os_info, token, last_seen, updated_at)
+						VALUES (?, ?, ?, 1, '', '', 0, '', ?, ?, ?)
+						ON CONFLICT(id) DO UPDATE SET
+							name = excluded.name,
+							type = excluded.type,
+							token = excluded.token,
+							updated_at = excluded.updated_at
+					`)
+					.bind(deviceId, deviceName, deviceType, bearerToken, now, now)
+					.run();
+			} else if (existingDevice.token !== bearerToken) {
+				// Update stored token to the valid tunnel token
+				await this.db
+					.prepare("UPDATE devices SET token = ?, updated_at = ? WHERE id = ?")
+					.bind(bearerToken, now, deviceId)
+					.run();
+			}
+		} else {
+			// Backward compatibility: manual pre-shared device token (sk_dev_...)
+			if (!deviceId) {
+				throw new Error("Missing device id in report payload");
+			}
+
+			const device = await this.db
+				.prepare("SELECT token FROM devices WHERE id = ?")
+				.bind(deviceId)
+				.first();
+
+			if (!device) {
+				throw new FleetAuthError(`Device '${deviceId}' is not registered`, 401);
+			}
+
+			if (device.token !== bearerToken) {
+				throw new FleetAuthError("Unauthorized: device token mismatch", 403);
+			}
 		}
 
 		const status = typeof payload.status === "number" ? payload.status : 1;

@@ -14,12 +14,8 @@ binding = "DB"
 database_name = "what-im-doing-fleet"
 database_id = "39004996-6aa8-47dd-a013-e1d6b477520d"
 
-# Optional Standalone Security:
-# If not using Cloudflare Zero Trust Access for /admin, set a secret via:
-#   npx wrangler secret put ADMIN_KEY
-# Or declare plain-text for dev:
-# [vars]
-# ADMIN_KEY = "dev_secret_key"
+[vars]
+ACCOUNT_ID = "9bd2e738536b0a16b01635ab14ea9503"
 
 # Observability
 [observability]

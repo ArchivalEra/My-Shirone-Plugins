@@ -91,6 +91,15 @@ class MockD1Database {
 					}
 					return { success: true };
 				}
+				if (q.includes("UPDATE devices SET token = ?")) {
+					const [token, updatedAt, id] = this.params;
+					const existing = db.rows.get(id);
+					if (existing) {
+						existing.token = token;
+						existing.updated_at = updatedAt;
+					}
+					return { success: true };
+				}
 				if (q.includes("DELETE FROM devices")) {
 					const [id] = this.params;
 					db.rows.delete(id);
@@ -104,6 +113,20 @@ class MockD1Database {
 					const [id] = this.params;
 					const row = db.rows.get(id);
 					return row ? { token: row.token } : null;
+				}
+				if (
+					q.includes("SELECT id, name, type, token FROM devices WHERE id = ?")
+				) {
+					const [id] = this.params;
+					const row = db.rows.get(id);
+					return row
+						? {
+								id: row.id,
+								name: row.name,
+								type: row.type,
+								token: row.token,
+							}
+						: null;
 				}
 				if (
 					q.includes(
@@ -439,5 +462,104 @@ test("Cloudflare Worker + D1: /activity and /activity/report Route Aliases", asy
 	assert.equal(snapshot.current.id, "laptop-node");
 	assert.equal(snapshot.current.appName, "Neovim");
 	assert.equal(snapshot.devices.length, 1);
+});
+
+test("Cloudflare Worker + D1: Native Cloudflare Tunnel Token Auto-Enrollment & Ingestion", async () => {
+	const db = new MockD1Database();
+	const env = {
+		DB: db,
+		ACCOUNT_ID: "9bd2e738536b0a16b01635ab14ea9503",
+	};
+
+	// 1. Prepare valid Tunnel Token for account 9bd2e738536b0a16b01635ab14ea9503
+	const validTunnelPayload = {
+		a: "9bd2e738536b0a16b01635ab14ea9503",
+		t: "1ee9a5e5-0acc-47aa-9de8-78a09cd964ba",
+		s: "MWMzYzZhZmQtNTM3OS00ZGE1LWI4MGItYzBiODczODU3NzVm",
+	};
+	const validTunnelToken = Buffer.from(
+		JSON.stringify(validTunnelPayload),
+	).toString("base64");
+
+	// 2. Reject tunnel token from mismatched/unauthorized account
+	const rogueTunnelPayload = {
+		a: "11111111222233334444555566667777",
+		t: "rogue-tunnel-uuid",
+		s: "secret",
+	};
+	const rogueToken = Buffer.from(
+		JSON.stringify(rogueTunnelPayload),
+	).toString("base64");
+
+	const rogueReq = new Request("http://localhost/activity/report", {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Authorization: `Bearer ${rogueToken}`,
+		},
+		body: JSON.stringify({
+			id: "debiansid",
+			name: "debiansid主机",
+			appName: "systemd",
+		}),
+	});
+	const rogueRes = await worker.fetch(rogueReq, env);
+	assert.equal(rogueRes.status, 403);
+	const rogueData = await rogueRes.json();
+	assert.ok(rogueData.error.includes("account mismatch"));
+
+	// 3. Unregistered device sends telemetry with valid Tunnel Token -> Auto-enrolled on the fly!
+	const reportReq = new Request("http://localhost/activity/report", {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Authorization: `Bearer ${validTunnelToken}`,
+		},
+		body: JSON.stringify({
+			id: "debiansid",
+			name: "debiansid主机",
+			type: "server",
+			status: 1,
+			appName: "cloudflared",
+			windowTitle: "Tunnel Service Active",
+			idleSeconds: 0,
+			timestamp: Date.now(),
+		}),
+	});
+	const reportRes = await worker.fetch(reportReq, env);
+	assert.equal(reportRes.status, 200);
+	const reportData = await reportRes.json();
+	assert.equal(reportData.ok, true);
+	assert.equal(reportData.id, "debiansid");
+
+	// 4. Verify device was automatically enrolled in D1
+	assert.ok(db.rows.has("debiansid"));
+	const enrolled = db.rows.get("debiansid");
+	assert.equal(enrolled.name, "debiansid主机");
+	assert.equal(enrolled.type, "server");
+	assert.equal(enrolled.app_name, "cloudflared");
+	assert.equal(enrolled.token, validTunnelToken);
+
+	// 5. Query /activity snapshot and confirm device is live
+	const getReq = new Request("http://localhost/activity");
+	const getRes = await worker.fetch(getReq, env);
+	assert.equal(getRes.status, 200);
+	const snapshot = await getRes.json();
+	assert.equal(snapshot.current.id, "debiansid");
+	assert.equal(snapshot.current.name, "debiansid主机");
+	assert.equal(snapshot.current.appName, "cloudflared");
+
+	// 6. Admin API also accepts Tunnel Token as root credentials
+	const adminReq = new Request("http://localhost/admin/devices", {
+		method: "GET",
+		headers: {
+			Authorization: `Bearer ${validTunnelToken}`,
+		},
+	});
+	const adminRes = await worker.fetch(adminReq, env);
+	assert.equal(adminRes.status, 200);
+	const adminData = await adminRes.json();
+	assert.ok(Array.isArray(adminData.devices));
+	assert.equal(adminData.devices.length, 1);
 });
 

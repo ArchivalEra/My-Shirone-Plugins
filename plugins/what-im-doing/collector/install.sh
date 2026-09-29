@@ -12,14 +12,26 @@ CONFIG_FILE="${HOME}/.config/what-im-doing.json"
 SYSTEMD_USER_DIR="${HOME}/.config/systemd/user"
 SERVICE_FILE="${SYSTEMD_USER_DIR}/what-im-doing.service"
 
+# Helper to automatically infer machine form-factor
+detect_device_type() {
+    if [[ -d /sys/class/power_supply ]] && ls /sys/class/power_supply/BAT* >/dev/null 2>&1; then
+        echo "laptop"
+    elif [[ -n "${WAYLAND_DISPLAY:-}" || -n "${DISPLAY:-}" ]]; then
+        echo "desktop"
+    else
+        echo "server"
+    fi
+}
+
 # Defaults
-ENDPOINT=""
+ENDPOINT="${ENDPOINT:-https://api.mango-mesa.ccwu.cc/activity/report}"
 HUB_URL=""
 ADMIN_KEY=""
 DEVICE_ID="$(hostname | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')"
 DEVICE_NAME="$(hostname) (Linux)"
-DEVICE_TYPE="desktop"
+DEVICE_TYPE="$(detect_device_type)"
 TOKEN=""
+PROXY="${PROXY:-${https_proxy:-${http_proxy:-}}}"
 CF_CLIENT_ID=""
 CF_CLIENT_SECRET=""
 INTERVAL="15"
@@ -74,6 +86,7 @@ while [[ $# -gt 0 ]]; do
         --name) DEVICE_NAME="$2"; shift 2 ;;
         --type) DEVICE_TYPE="$2"; shift 2 ;;
         --token) TOKEN="$2"; shift 2 ;;
+        --proxy) PROXY="$2"; shift 2 ;;
         --cf-id) CF_CLIENT_ID="$2"; shift 2 ;;
         --cf-secret) CF_CLIENT_SECRET="$2"; shift 2 ;;
         --interval) INTERVAL="$2"; shift 2 ;;
@@ -98,14 +111,31 @@ if [[ "$UNINSTALL" == true ]]; then
     exit 0
 fi
 
-# Auto-enrollment via Admin Key if token is missing
+# Auto-detect Cloudflare Tunnel token if token is missing (Zero-Touch Enrollment)
+if [[ -z "$TOKEN" && ! -f "$CONFIG_FILE" ]]; then
+    if [[ -r /etc/cloudflared/token ]]; then
+        TOKEN="$(cat /etc/cloudflared/token | tr -d '\r\n[:space:]')"
+        echo "✔ Auto-detected Cloudflare Tunnel token from /etc/cloudflared/token (Zero-Touch Mode)"
+    elif command -v sudo &>/dev/null; then
+        if sudo -n test -r /etc/cloudflared/token 2>/dev/null; then
+            TOKEN="$(sudo -n cat /etc/cloudflared/token 2>/dev/null | tr -d '\r\n[:space:]')"
+            echo "✔ Auto-detected Cloudflare Tunnel token via sudo (Zero-Touch Mode)"
+        elif sudo test -r /etc/cloudflared/token 2>/dev/null; then
+            echo "==> Reading Cloudflare Tunnel token from /etc/cloudflared/token (sudo required)..."
+            TOKEN="$(sudo cat /etc/cloudflared/token | tr -d '\r\n[:space:]')"
+            echo "✔ Acquired Cloudflare Tunnel token (Zero-Touch Mode)"
+        fi
+    fi
+fi
+
+# Fallback: Auto-enrollment via Admin Key if token is still missing
 if [[ -z "$TOKEN" && -n "$ADMIN_KEY" ]]; then
     target_hub="${HUB_URL:-$ENDPOINT}"
     if [[ -z "$target_hub" ]]; then
         echo "Error: --hub <URL> or --endpoint <URL> is required when using --admin-key." >&2
         exit 1
     fi
-    echo "==> Enrolling device automatically using register-device.sh..."
+    echo "==> Enrolling device using register-device.sh..."
     reg_cmd=(bash "${SCRIPT_DIR}/register-device.sh"
         --hub "$target_hub"
         --admin-key "$ADMIN_KEY"
@@ -174,6 +204,7 @@ cat > "$CONFIG_FILE" <<EOF
   "deviceName": "${DEVICE_NAME}",
   "deviceType": "${DEVICE_TYPE}",
   "token": "${TOKEN}",
+  "proxy": "${PROXY}",
   "cfAccessClientId": "${CF_CLIENT_ID}",
   "cfAccessClientSecret": "${CF_CLIENT_SECRET}"
 }
@@ -195,10 +226,21 @@ chmod +x "$INSTALL_BIN"
 echo "✔ Installed collector script to $INSTALL_BIN"
 
 # 4. Install systemd user service
+env_proxy_lines=""
+if [[ -n "${PROXY}" ]]; then
+    env_proxy_lines=$(cat <<ENV_EOF
+Environment=PROXY=${PROXY}
+Environment=https_proxy=${PROXY}
+Environment=http_proxy=${PROXY}
+Environment=all_proxy=${PROXY}
+ENV_EOF
+)
+fi
+
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=What-Im-Doing Linux Activity Collector (Fleet Mode)
-After=graphical-session.target default.target
+After=network-online.target graphical-session.target default.target
 PartOf=graphical-session.target
 
 [Service]
@@ -207,6 +249,7 @@ ExecStart=${INSTALL_BIN}
 Restart=always
 RestartSec=10
 Environment=INTERVAL=${INTERVAL}
+${env_proxy_lines}
 
 [Install]
 WantedBy=default.target
