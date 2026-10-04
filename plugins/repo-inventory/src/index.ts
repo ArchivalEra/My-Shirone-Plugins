@@ -40,6 +40,13 @@ export interface RepoState {
 	language: string | null;
 	/** Canonical GitHub URL. Carried so a consumer never has to know the owner. */
 	url: string;
+	/**
+	 * Repository icon, inlined as a data URI (empty when the repository carries
+	 * none). Read from the repository itself at a conventional path so the
+	 * showcase needs no hand-written icon per entry; see the adapter's candidate
+	 * list. Kept as a data URI so consumers render it with zero runtime requests.
+	 */
+	icon: string;
 }
 
 export interface RepoInventory {
@@ -61,6 +68,8 @@ export interface RepoFacts {
 	description?: string;
 	language?: string | null;
 	url?: string;
+	/** Repository icon as a data URI; omitted/empty when the repository has none. */
+	icon?: string;
 }
 
 /**
@@ -129,6 +138,7 @@ function buildInventory(
 			description: found.description ?? "",
 			language: found.language ?? null,
 			url: found.url ?? "",
+			icon: found.icon ?? "",
 		});
 	}
 	return {

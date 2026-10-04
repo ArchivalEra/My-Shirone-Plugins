@@ -96,6 +96,65 @@ function makeAdapter({ api, owner, mirrorRepo, mirrorBranch, mirrorDir, token })
 		console.error(`[repo-inventory] ${message}`);
 	}
 
+	/**
+	 * Candidate icon paths inside a repository, most specific first. The
+	 * showcase reads the icon from the repository itself, so no per-entry icon
+	 * has to be hand-written; a repository that carries none just renders its
+	 * fallback glyph. Root-level names come first so any repo can drop an icon
+	 * in without a convention directory.
+	 */
+	const ICON_CANDIDATES = [
+		"icon.svg",
+		".github/icon.svg",
+		"docs/icon.svg",
+		"assets/icon.svg",
+		"public/icon.svg",
+		"icon.png",
+		"docs/icon.png",
+		"assets/icon.png",
+		"public/icon.png",
+	];
+
+	const ICON_MIME = {
+		svg: "image/svg+xml",
+		png: "image/png",
+		webp: "image/webp",
+		gif: "image/gif",
+		jpg: "image/jpeg",
+		jpeg: "image/jpeg",
+	};
+
+	/**
+	 * Read one repository's icon and inline it as a data URI. Tries each
+	 * candidate path (GitHub's Contents API resolves them against the default
+	 * branch, so this is branch-agnostic). Returns "" when none is found or every
+	 * read fails — a missing icon is an omission, never an error that sinks the
+	 * whole inventory.
+	 */
+	async function readIcon(name) {
+		for (const candidate of ICON_CANDIDATES) {
+			const response = await request(
+				`/repos/${owner}/${name}/contents/${candidate}`,
+			);
+			if (!response.ok) continue;
+			let payload;
+			try {
+				payload = await response.json();
+			} catch {
+				continue;
+			}
+			if (!payload || payload.type !== "file" || typeof payload.content !== "string") {
+				continue;
+			}
+			const ext = candidate.split(".").pop().toLowerCase();
+			const mime = ICON_MIME[ext] ?? "application/octet-stream";
+			// The Contents API returns base64 with embedded newlines.
+			const base64 = payload.content.replace(/\s+/g, "");
+			return `data:${mime};base64,${base64}`;
+		}
+		return "";
+	}
+
 	return {
 		/** The only place that knows GitHub's list shape. */
 		async discover() {
@@ -150,6 +209,7 @@ function makeAdapter({ api, owner, mirrorRepo, mirrorBranch, mirrorDir, token })
 				description: typeof repo.description === "string" ? repo.description : "",
 				language: typeof repo.language === "string" ? repo.language : null,
 				url: typeof repo.html_url === "string" ? repo.html_url : "",
+				icon: await readIcon(name),
 			};
 		},
 

@@ -44,6 +44,7 @@ export interface RepoState {
 	accelerated: boolean;    // 由镜像树的目录名判定，"目录即事实"
 	pushedAt: string;
 	status: string | null;   // GitHub 原始构建状态，只进文件不上 UI
+	icon: string;            // 仓库自持图标（data URI），空串=该仓无图标
 }
 
 export interface RepoInventory {
@@ -57,6 +58,20 @@ export interface RepoInventory {
 
 - **读不到就不写。** `facts()` 返回 `null`（仓库读失败、限流）时，该仓**从 `entries` 里省略**，而不是猜一个状态。项目页因此显示"没有徽章"，而不是显示一个假徽章。
 - **`acceleratedDirs` 收全部目录名。** 镜像树里有、没有任何仓库对应的目录就是孤儿——它们会被 CLI 单独报出来，这也是那棵无人引用的静态树能被自动发现的原因，而不是靠人记得。
+
+### 仓库自持图标
+
+图标也是**机器事实**，不是项目页手写的一栏。适配器在每个仓库里按下面的候选路径找第一张存在的图，读出来内联成 data URI：
+
+```
+icon.svg / .github/icon.svg / docs/icon.svg / assets/icon.svg / public/icon.svg
+icon.png / docs/icon.png / assets/icon.png / public/icon.png
+```
+
+- 想给项目页一个图标，就把它放进仓库（根目录或任一约定目录），**下一次构建自动出现**——项目页不需要改一行、不需要登记。
+- 找不到就留空串，消费端退回自己的字形回退（如 Shirone 的 iconify 名）。
+- 内联为 data URI 是为了消费端**运行时零请求**：不引 jsdelivr 的 `@main`（可变引用、会被 CDN/浏览器长缓存，改图标线上仍旧图），也不跨域。
+- 覆盖语义：消费端可给某个条目手写 `icon` 覆盖（例如某个仓放不了图标时指向一个 iconify 名），未手写时自动采用仓库自持图标。
 
 ---
 

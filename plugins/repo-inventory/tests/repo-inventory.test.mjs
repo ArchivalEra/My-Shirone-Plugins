@@ -92,6 +92,23 @@ test("list carries the description and language through untouched", async () => 
 	assert.equal(inventory.entries[0].url, "https://github.com/ArchivalEra/alpha");
 });
 
+test("list carries a repository icon data URI through, and defaults an absent one to empty", async () => {
+	const withIcon = makeAdapter({
+		factsByName: {
+			alpha: {
+				hasPages: false,
+				pushedAt: "",
+				status: null,
+				icon: "data:image/svg+xml;base64,PHN2Zy8+",
+			},
+			beta: { hasPages: false, pushedAt: "", status: null },
+		},
+	});
+	const inventory = await list(["alpha", "beta"], withIcon);
+	assert.equal(inventory.entries[0].icon, "data:image/svg+xml;base64,PHN2Zy8+");
+	assert.equal(inventory.entries[1].icon, "");
+});
+
 test("list reports an absent description and language as empty, not undefined", async () => {
 	const adapter = makeAdapter({
 		factsByName: { alpha: { hasPages: false, pushedAt: "", status: null } },
