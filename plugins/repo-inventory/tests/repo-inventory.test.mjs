@@ -41,8 +41,22 @@ test("selectDiscovered drops exactly the excluded names, and nothing else", () =
 	assert.deepEqual(names, ["alpha", "gamma-fork"]);
 });
 
-test("selectDiscovered keeps public forks: the rule is not-private, not not-a-fork", () => {
-	assert.ok(selectDiscovered(LISTING).includes("gamma-fork"));
+test("selectDiscovered drops public forks: 2026-10-04 规则变更（原「fork 故意保留」作废）", () => {
+	// 旧规则：「fork 保留——账号公开的东西就是它有的」。后果：依赖 fork
+	// （gl4es/OpenBLAS/…）以无图标 discovered 卡淹没展台。新规则：fork 一律不进。
+	const names = selectDiscovered([
+		{ name: "real-project", private: false },
+		{ name: "dep-fork", private: false, fork: true },
+	]);
+	assert.deepEqual(names, ["real-project"]);
+});
+
+test("selectDiscovered drops repos flagged fork=true even when named like a project", () => {
+	const names = selectDiscovered([
+		{ name: "real-project", private: false },
+		{ name: "dep-fork", private: false, fork: true },
+	]);
+	assert.deepEqual(names, ["real-project"]);
 });
 
 test("selectDiscovered normalizes and de-duplicates names, and ignores unusable ones", () => {

@@ -177,6 +177,7 @@ function makeAdapter({ api, owner, mirrorRepo, mirrorBranch, mirrorDir, token })
 			return listing.map((repo) => ({
 				name: typeof repo?.name === "string" ? repo.name : "",
 				private: Boolean(repo?.private),
+				fork: Boolean(repo?.fork),
 			}));
 		},
 

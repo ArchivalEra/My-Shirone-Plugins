@@ -86,6 +86,8 @@ export interface InventoryDeps {
 export interface DiscoveredRepo {
 	name: string;
 	private?: boolean;
+	/** GitHub 的 fork 字段：true = 上游镜像/依赖 fork，一律不进清单。 */
+	fork?: boolean;
 }
 
 const NAME_FILTER = /^[A-Za-z0-9._-]+$/;
@@ -165,6 +167,9 @@ export function selectDiscovered(
 	const names: string[] = [];
 	for (const repo of repos) {
 		if (!repo || repo.private) continue;
+		// fork 一律不进清单：它们是上游的镜像/依赖，不是这个账号的项目。
+		// GitHub 的 fork 字段是机器事实，先于任何排除表生效。
+		if (repo.fork) continue;
 		const name = normalizeName(typeof repo.name === "string" ? repo.name : "");
 		if (!name || excluded.has(name) || !NAME_FILTER.test(name)) continue;
 		names.push(name);
