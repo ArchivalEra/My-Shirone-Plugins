@@ -1,0 +1,47 @@
+{
+ "schema": 1,
+ "generated": "2026-10-31T20:47:50+0800",
+ "_why": "事实台账：每条 = 一个**测出来**的值 + 复跑命令 + 出处。别手改，跑 zreflect/facts.py。",
+ "facts": {
+  "plugins": {
+   "value": 10,
+   "cmd": "ls -d plugins/*/ | wc -l",
+   "source": "plugins/",
+   "measured_at": "2026-10-31T20:47:49+0800",
+   "first_seen": "2026-10-31",
+   "note": "插件目录数（每个插件一个顶层目录）"
+  },
+  "plugin_names": {
+   "value": "dynamic-svg,mangomesa-hub,mellow-player,mixed-feed,pretext-masonry,repo-inventory,repo-pages,steam-recent,strip-first-h1,what-im-doing",
+   "cmd": "ls -d plugins/*/ | sed 's|plugins/||;s|/$||' | tr '\\n' ',' | sed 's/,$//'",
+   "source": "plugins/",
+   "measured_at": "2026-10-31T20:47:49+0800",
+   "first_seen": "2026-10-31",
+   "note": "插件名清单（逗号连接，顺序即排序结果）"
+  },
+  "test_files": {
+   "value": 27,
+   "cmd": "find plugins -name '*.test.mjs' -not -path '*/node_modules/*' | wc -l",
+   "source": "plugins/",
+   "measured_at": "2026-10-31T20:47:49+0800",
+   "first_seen": "2026-10-31",
+   "note": "测试文件数（*.test.mjs）"
+  },
+  "plugins_with_tests": {
+   "value": 9,
+   "cmd": "ls -d plugins/*/tests 2>/dev/null | wc -l",
+   "source": "plugins/",
+   "measured_at": "2026-10-31T20:47:49+0800",
+   "first_seen": "2026-10-31",
+   "note": "含 tests/ 目录的插件数（应与 plugins 相等，缺一个就是补测缺口）"
+  },
+  "plugins_without_tests": {
+   "value": "mixed-feed",
+   "cmd": "comm -13 <(ls -d plugins/*/tests 2>/dev/null | sed 's|plugins/||;s|/tests||' | sort) <(ls -d plugins/*/ | sed 's|plugins/||;s|/$||' | sort) | tr '\\n' ',' | sed 's/,$//'",
+   "source": "plugins/",
+   "measured_at": "2026-10-31T20:47:49+0800",
+   "first_seen": "2026-10-31",
+   "note": "没有 tests/ 目录的插件名（逗号连接；空值表示全部有测试）"
+  }
+ }
+}

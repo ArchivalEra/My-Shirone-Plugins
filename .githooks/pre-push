@@ -1,8 +1,30 @@
 #!/usr/bin/env bash
 #
-# Git pre-push hook: Enforces that `maintaince.md` is updated in every push.
+# Git pre-push hook:
+#   ① Einfacht 事实系统段（机器块重渲染 + 全部 pre-push 相位闸门）
+#   ② 本仓既有检查：每次推送必须更新 maintaince.md
 #
+# 为什么①内嵌而不是换 core.hooksPath：本仓 .githooks 是既有的主钩子链，
+# 换 hooksPath 会让那条链整个失效。照 Octave-Full-Wasm / S26 的成熟做法，
+# 在同一个钩子里显式调用两套机制 —— 机制本体留在 zreflect/，升级只需替换那些文件。
+#
+# ⚠️ 守卫：`$PWD` 可能是**别人的仓库**（core.hooksPath 被继承：测试夹具、外部克隆）；
+#    没有 zreflect/ 就跳过 Einfacht 段，本仓既有检查照跑 —— 钩子本体通用。
 set -euo pipefail
+
+REPO="$(git rev-parse --show-toplevel 2>/dev/null || echo .)"
+cd "$REPO"
+
+# ── ① Einfacht：机器块重渲染 + pre-push 相位闸门 ──────────────────────────
+if [ -f zreflect/facts.py ]; then
+  [ -f reflect-hooks/Einfacht.env ] && . reflect-hooks/Einfacht.env
+  DOC="${REFLECT_DOC:-STATE.md}"
+  if [ -f "$DOC" ]; then
+    python3 zreflect/facts.py --render-doc "$DOC" || exit 1
+    git add "$DOC" 2>/dev/null || true
+  fi
+  python3 zreflect/registry.py --run pre-push || exit 1
+fi
 
 remote="$1"
 url="$2"
