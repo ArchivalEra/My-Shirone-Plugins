@@ -22,26 +22,40 @@ function parseArgs(args) {
 		dryRun: false,
 	};
 
-	for (let i = 0; i < args.length; i++) {
+	// `while`, not `for`: every recognised flag consumes the token after it, so
+	// the cursor advance is parse state owned by the matching branch. Advancing
+	// via `args[++i]` inside a `for` head performs the same step twice, which
+	// reads as a redundant counter bump to linters.
+	let i = 0;
+	while (i < args.length) {
 		const arg = args[i];
 		if (arg === "--hub" || arg === "--endpoint") {
-			parsed.hub = args[++i];
+			parsed.hub = args[i + 1];
+			i += 2;
 		} else if (arg === "--admin-key") {
-			parsed.adminKey = args[++i];
+			parsed.adminKey = args[i + 1];
+			i += 2;
 		} else if (arg === "--id") {
-			parsed.id = args[++i];
+			parsed.id = args[i + 1];
+			i += 2;
 		} else if (arg === "--name") {
-			parsed.name = args[++i];
+			parsed.name = args[i + 1];
+			i += 2;
 		} else if (arg === "--type") {
-			parsed.type = args[++i];
+			parsed.type = args[i + 1];
+			i += 2;
 		} else if (arg === "--config") {
-			parsed.config = resolve(args[++i]);
+			parsed.config = resolve(args[i + 1]);
+			i += 2;
 		} else if (arg === "--cf-id") {
-			parsed.cfId = args[++i];
+			parsed.cfId = args[i + 1];
+			i += 2;
 		} else if (arg === "--cf-secret") {
-			parsed.cfSecret = args[++i];
+			parsed.cfSecret = args[i + 1];
+			i += 2;
 		} else if (arg === "--dry-run") {
 			parsed.dryRun = true;
+			i += 1;
 		} else if (arg === "--help" || arg === "-h") {
 			console.log(`
 what-im-doing: Machine Registration Tool (Node.js)
@@ -64,6 +78,10 @@ Config Options:
   --help, -h           Show this help message
 `);
 			process.exit(0);
+		} else {
+			// Unknown token: skip it. Without this the cursor never advances and
+			// the loop spins forever, which a `for` head would have prevented.
+			i += 1;
 		}
 	}
 

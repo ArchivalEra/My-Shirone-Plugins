@@ -39,7 +39,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function parseArgs(argv) {
 	const args = { apps: [], recent: false, out: "" };
-	for (let i = 0; i < argv.length; i++) {
+	// `while`, not `for`: `--apps` and `--out` consume the following token, so
+	// the cursor advance belongs to the branch that consumed it.
+	let i = 0;
+	while (i < argv.length) {
 		if (argv[i] === "--apps" && argv[i + 1]) {
 			args.apps.push(
 				...argv[i + 1]
@@ -47,12 +50,15 @@ function parseArgs(argv) {
 					.map((s) => s.trim())
 					.filter((s) => /^\d+$/.test(s)),
 			);
-			i++;
+			i += 2;
 		} else if (argv[i] === "--recent") {
 			args.recent = true;
+			i += 1;
 		} else if (argv[i] === "--out" && argv[i + 1]) {
 			args.out = argv[i + 1];
-			i++;
+			i += 2;
+		} else {
+			i += 1;
 		}
 	}
 	return args;

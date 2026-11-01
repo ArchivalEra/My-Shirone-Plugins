@@ -50,18 +50,24 @@ function parseArgs() {
 	const flags = {};
 	let repoArg = null;
 
-	for (let i = 1; i < args.length; i++) {
+	// `while`, not `for`: a flag that carries a value advances the cursor by two,
+	// one that does not advances by one. That is parse state, not a loop counter
+	// a `for` header could own.
+	let i = 1;
+	while (i < args.length) {
 		const arg = args[i];
 		if (arg.startsWith("--")) {
 			const key = arg.slice(2);
 			if (i + 1 < args.length && !args[i + 1].startsWith("--")) {
 				flags[key] = args[i + 1];
-				i++;
+				i += 2;
 			} else {
 				flags[key] = true;
+				i += 1;
 			}
-		} else if (!repoArg) {
-			repoArg = arg;
+		} else {
+			if (!repoArg) repoArg = arg;
+			i += 1;
 		}
 	}
 

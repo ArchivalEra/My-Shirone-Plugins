@@ -55,17 +55,25 @@ Environment:
 
 function parseArgs(argv) {
 	const flags = {};
-	for (let i = 0; i < argv.length; i += 1) {
+	// A `while` loop, not `for`: the body consumes the value after a `--key`, so
+	// the cursor advance is part of the parse rather than bookkeeping the `for`
+	// header already performs. Reassigning `i` inside a `for` head reads as a
+	// redundant double-advance to linters; here it is the whole point.
+	let i = 0;
+	while (i < argv.length) {
 		const arg = argv[i];
 		if (arg === "--help" || arg === "-h") return { help: true };
-		if (!arg.startsWith("--")) continue;
+		if (!arg.startsWith("--")) {
+			i += 1;
+			continue;
+		}
 		const key = arg.slice(2);
 		const value = argv[i + 1];
 		if (value === undefined || value.startsWith("--")) {
 			throw new Error(`Missing value for --${key}`);
 		}
 		flags[key] = value;
-		i += 1;
+		i += 2;
 	}
 	return flags;
 }
