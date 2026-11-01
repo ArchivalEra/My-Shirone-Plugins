@@ -68,35 +68,40 @@ export function remarkStripFirstH1(options: StripFirstH1Options = {}) {
 	return (tree: MdastTree, file?: VFileContext): void => {
 		if (!tree || !Array.isArray(tree.children)) return;
 
-		for (let i = 0; i < tree.children.length; i++) {
-			const node = tree.children[i];
-			if (node && node.type === "heading") {
-				// We encountered the first heading in the document
-				if (node.depth === 1) {
-					if (options.matchTitleOnly) {
-						const frontmatterTitle =
-							file?.data?.astro?.frontmatter?.title ??
-							file?.data?.frontmatter?.title;
-						const headingText = extractNodeText(node).trim();
+		const firstHeadingIndex = findFirstHeadingIndex(tree.children);
+		if (firstHeadingIndex === -1) return;
 
-						if (
-							frontmatterTitle &&
-							typeof frontmatterTitle === "string" &&
-							frontmatterTitle.trim().toLowerCase() ===
-								headingText.toLowerCase()
-						) {
-							tree.children.splice(i, 1);
-						}
-					} else {
-						// Strip unconditionally
-						tree.children.splice(i, 1);
-					}
-				}
-				// Crucial: Stop immediately at the first heading. Never scan remaining nodes!
-				break;
-			}
-		}
+		const node = tree.children[firstHeadingIndex];
+		if (node.depth !== 1) return;
+
+		if (options.matchTitleOnly && !headingMatchesTitle(node, file)) return;
+
+		tree.children.splice(firstHeadingIndex, 1);
 	};
+}
+
+/**
+ * Index of the first heading node, or -1.
+ *
+ * The scan stops at the first heading of any depth: a depth-2 heading before a
+ * depth-1 one means the document starts with a real section, and stripping a
+ * later h1 would delete content rather than a duplicate title.
+ */
+function findFirstHeadingIndex(children: readonly MdastNode[]): number {
+	for (let i = 0; i < children.length; i++) {
+		const node = children[i];
+		if (node && node.type === "heading") return i;
+	}
+	return -1;
+}
+
+/** Whether the document's frontmatter title equals the heading text, ignoring case. */
+function headingMatchesTitle(node: MdastNode, file?: VFileContext): boolean {
+	const frontmatterTitle =
+		file?.data?.astro?.frontmatter?.title ?? file?.data?.frontmatter?.title;
+	if (!frontmatterTitle || typeof frontmatterTitle !== "string") return false;
+	const headingText = extractNodeText(node).trim();
+	return frontmatterTitle.trim().toLowerCase() === headingText.toLowerCase();
 }
 
 /**
