@@ -172,11 +172,9 @@ if (typeof window !== "undefined") {
 	window.addEventListener("what-im-doing:init", () => autoInit());
 	if (window.__WHAT_IM_DOING_CONFIG__) {
 		autoInit();
+	} else if (document.readyState === "loading") {
+		document.addEventListener("DOMContentLoaded", () => autoInit());
 	} else {
-		if (document.readyState === "loading") {
-			document.addEventListener("DOMContentLoaded", () => autoInit());
-		} else {
-			setTimeout(autoInit, 0);
-		}
+		setTimeout(autoInit, 0);
 	}
 }

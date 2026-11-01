@@ -51,7 +51,8 @@ console.log(`• Device ID:   ${deviceId}`);
 console.log(`• Device Name: ${deviceName}`);
 console.log(`• Endpoint:    ${endpoint}`);
 console.log(`• Interval:    ${intervalSec}s`);
-console.log(`• Mode:        ${isDryRun ? "Dry-Run" : isOnce ? "Once" : "Continuous Daemon"}`);
+const modeLabel = isDryRun ? "Dry-Run" : isOnce ? "Once" : "Continuous Daemon";
+console.log(`• Mode:        ${modeLabel}`);
 console.log("───────────────────────────────────────────────────────────────");
 
 async function collectAndSend() {

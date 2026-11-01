@@ -15,6 +15,21 @@ export class FleetAuthError extends Error {
 }
 
 /**
+ * Resolve the service label from an origin-cache payload.
+ *
+ * Accepts both shapes the CDN emits: a plain string, or an object carrying a
+ * `name` field. Anything else - including an object without `name` - falls back
+ * to `origin-cache` so the fleet view never shows a blank app label.
+ */
+function resolveServiceName(service) {
+	if (typeof service === "string") return service.slice(0, 64);
+	if (typeof service === "object" && service?.name) {
+		return String(service.name).slice(0, 64);
+	}
+	return "origin-cache";
+}
+
+/**
  * Parses and validates a Cloudflare Tunnel token (base64 encoded JSON { a, t, s })
  */
 export function parseTunnelToken(token) {
@@ -145,12 +160,7 @@ export class FleetStore {
 			.toLowerCase()
 			.replace(/[^a-z0-9_-]/g, "");
 		const deviceName = `云盘 CDN 存储 (${host})`;
-		const appName =
-			typeof payload.service === "string"
-				? payload.service.slice(0, 64)
-				: typeof payload.service === "object" && payload.service?.name
-					? String(payload.service.name).slice(0, 64)
-					: "origin-cache";
+		const appName = resolveServiceName(payload.service);
 		const reportTs = payload.ts ? Date.parse(payload.ts) : Date.now();
 		const validTs = Number.isNaN(reportTs) ? Date.now() : reportTs;
 		const now = Date.now();
@@ -183,12 +193,12 @@ export class FleetStore {
 		const rawStatus = String(payload.status || "").toLowerCase();
 		const rawEvent = String(payload.event || "").toLowerCase();
 
+		// `status` is initialised to 1 above, so the `else` branch needs no
+		// assignment: the value it would write is already there on every path.
 		if (rawEvent === "down" || rawStatus === "down") {
 			status = 4;
 		} else if (rawStatus === "degraded") {
 			status = 3;
-		} else {
-			status = 1;
 		}
 
 		// Window title (one-line human status for blog UI)

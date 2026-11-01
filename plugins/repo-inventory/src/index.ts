@@ -145,7 +145,13 @@ function buildInventory(
 	}
 	return {
 		generatedAt,
-		acceleratedDirs: [...acceleratedDirs].sort(),
+		// `localeCompare` with a pinned locale: default `Array#sort` compares UTF-16
+		// code units, so `Alpha` sorts before `alpha` and digits land wherever
+		// their code points happen to fall. These are GitHub repository names,
+		// read by humans in the projects table, so the ordering should be the
+		// alphabetical one a reader expects. Pinning to "en" keeps the output
+		// stable across machines with different system locales.
+		acceleratedDirs: [...acceleratedDirs].sort((a, b) => a.localeCompare(b, "en")),
 		entries,
 	};
 }

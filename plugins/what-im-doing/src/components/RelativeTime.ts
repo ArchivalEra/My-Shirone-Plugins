@@ -153,14 +153,12 @@ export function formatActivitySentence(
 		} else {
 			sentence = `${relativeTime}在 ${dev} 使用 ${act.appName}`;
 		}
+	} else if (isCurrentlyActive) {
+		sentence = `Using ${act.appName} on ${dev}`;
+	} else if (statusType === "offline") {
+		sentence = `Last used: ${act.appName}`;
 	} else {
-		if (isCurrentlyActive) {
-			sentence = `Using ${act.appName} on ${dev}`;
-		} else if (statusType === "offline") {
-			sentence = `Last used: ${act.appName}`;
-		} else {
-			sentence = `${relativeTime} used ${act.appName} on ${dev}`;
-		}
+		sentence = `${relativeTime} used ${act.appName} on ${dev}`;
 	}
 
 	return {
