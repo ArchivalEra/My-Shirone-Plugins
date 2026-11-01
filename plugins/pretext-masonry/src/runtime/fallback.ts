@@ -24,17 +24,11 @@ export function packMasonryDomFallback(
 		const gridColumnEnd = getComputedStyle(card).gridColumnEnd;
 		const spanMatch = /span\s+(\d+)/.exec(gridColumnEnd);
 		const dataSpan = Number.parseInt(card.dataset.masonrySpan ?? "", 10);
-		const span = Math.min(
-			Math.max(
-				Number.isFinite(dataSpan)
-					? dataSpan
-					: spanMatch
-						? Number.parseInt(spanMatch[1], 10)
-						: 1,
-				1,
-			),
-			colCount,
-		);
+		// Resolve the preferred span without a nested ternary: dataset wins
+		// when numeric, otherwise the CSS `grid-column-end: span N` hint, else 1.
+		const cssSpan = spanMatch ? Number.parseInt(spanMatch[1], 10) : 1;
+		const preferredSpan = Number.isFinite(dataSpan) ? dataSpan : cssSpan;
+		const span = Math.min(Math.max(preferredSpan, 1), colCount);
 		return { card, height, span };
 	});
 
