@@ -37,7 +37,13 @@ export interface DeviceActivity {
 	// Fleet v2 / Mix Space compatibility aliases
 	id?: string;
 	name?: string;
-	type?: "desktop" | "laptop" | "server" | "mobile" | "other" | string;
+	// Device category. The fleet UI knows how to render `desktop`, `laptop`,
+	// `server`, `mobile` and `other`, but Mix Space and future collectors may
+	// report arbitrary values and the ingestion path accepts them. Writing the
+	// known set as `"desktop" | ... | string` was no narrower than plain
+	// `string` - the union collapsed - so the categories are listed here in
+	// prose instead, where they inform without pretending to constrain.
+	type?: string;
 	offline?: boolean;
 	lastSeen?: number;
 	process_name?: string;

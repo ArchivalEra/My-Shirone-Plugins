@@ -94,7 +94,15 @@ async function inspectCommand(owner, asJson) {
 		if (pagesRaw) {
 			try {
 				pagesInfo = JSON.parse(pagesRaw);
-			} catch (_) {}
+			} catch {
+				// Deliberate degradation, not a swallowed bug: `runGh` already
+				// returns null when `gh` exits non-zero, so reaching this branch
+				// means the command succeeded but printed something that is not
+				// JSON. There is no Pages configuration to read either way, and
+				// the caller treats `null` as "Pages not enabled" - the same
+				// conclusion the parse failure implies.
+				pagesInfo = null;
+			}
 		}
 
 		const hasPages = Boolean(pagesInfo && pagesInfo.html_url);
@@ -176,7 +184,12 @@ async function enableCommand(owner, repoName, flags) {
 			console.log(`   国内镜像:   https://${DEFAULT_DOMAIN}/repo/${repoName}/`);
 			console.log(`   EdgeOne 将在 GitHub 构建完毕后自动提供加速反代与边缘缓存。\n`);
 			return;
-		} catch (_) {}
+		} catch {
+			// Deliberate degradation: the Pages POST can succeed while printing
+			// no parsable JSON body. Falling through to the advisory message
+			// below is the intended behaviour - the caller still learns which
+			// routes to check manually.
+		}
 	}
 
 	console.log(`\n💡 If the repository already has an active GitHub Actions workflow for Pages,`);

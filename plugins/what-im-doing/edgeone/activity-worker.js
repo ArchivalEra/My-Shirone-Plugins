@@ -48,9 +48,10 @@ class ProtoWriter {
 		this.writeVarint(val);
 	}
 	writeInt32(fieldNo, val) {
-		if (!val && val !== 0) return;
-		this.writeTag(fieldNo, WIRE_VARINT);
-		this.writeVarint(val);
+	// Protobuf encodes int32 and int64 identically on the wire (both VARINT),
+	// so this is a pure alias rather than a second implementation. Keeping the
+	// separate name preserves the schema's field typing at the call sites.
+		this.writeInt64(fieldNo, val);
 	}
 	writeMessage(fieldNo, msgBytes) {
 		this.writeTag(fieldNo, WIRE_LENGTH_DELIMITED);
