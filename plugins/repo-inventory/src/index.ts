@@ -96,7 +96,7 @@ function normalizeName(raw: string): string {
 	return raw
 		.trim()
 		.replace(/\.git$/i, "")
-		.replace(/^\/+|\/+$/g, "");
+		.replace(/^(?:\/+)|(?:\/+)$/g, "");
 }
 
 function normalizeNames(names: readonly string[]): string[] {

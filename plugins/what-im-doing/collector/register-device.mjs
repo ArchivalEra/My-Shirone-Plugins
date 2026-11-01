@@ -101,8 +101,13 @@ async function main() {
 	}
 
 	let cleanHub = args.hub.replace(/\/+$/, "");
+	// `$` must bind BOTH branches. Written as `A|B$` only `B` is anchored, so the
+	// first branch would eat an `/activity` appearing anywhere in the URL and not
+	// only at the end - `https://h/activity/other` became `https://h/other`.
+	// Grouping each branch before the anchor keeps the whole alternation
+	// end-anchored, which is what the suffix-strip intends.
 	cleanHub = cleanHub.replace(
-		/(\/api)?\/activity(\/report)?|\/admin(\/devices)?$/,
+		/(?:\/api)?\/activity(?:\/report)?$|\/admin(?:\/devices)?$/,
 		"",
 	);
 

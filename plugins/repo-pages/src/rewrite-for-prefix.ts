@@ -38,8 +38,8 @@ export function rewriteForPrefix(
 ): string {
 	if (!html || typeof html !== "string") return html;
 
-	const prefix = `/${(options?.prefix ?? "").trim().replace(/^\/+|\/+$/g, "")}`;
-	const repo = (options?.repo ?? "").trim().replace(/^\/+|\/+$/g, "");
+	const prefix = `/${(options?.prefix ?? "").trim().replace(/^(?:\/+)|(?:\/+)$/g, "")}`;
+	const repo = (options?.repo ?? "").trim().replace(/^(?:\/+)|(?:\/+)$/g, "");
 	if (!repo) return html;
 	const target = `${prefix}/${repo}/`;
 

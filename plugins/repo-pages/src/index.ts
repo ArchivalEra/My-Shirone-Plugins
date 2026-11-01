@@ -29,8 +29,8 @@ export function getDomesticRepoUrl(
 	domain = DEFAULT_CONFIG.domain,
 	routePrefix = DEFAULT_CONFIG.routePrefix,
 ): string {
-	const cleanRepo = repoName.trim().replace(/^\/+|\/+$/g, "");
-	const cleanPrefix = routePrefix.trim().replace(/^\/+|\/+$/g, "");
+	const cleanRepo = repoName.trim().replace(/^(?:\/+)|(?:\/+)$/g, "");
+	const cleanPrefix = routePrefix.trim().replace(/^(?:\/+)|(?:\/+)$/g, "");
 	return `https://${domain}/${cleanPrefix}/${cleanRepo}/`;
 }
 
@@ -41,7 +41,7 @@ export function getOriginalGitHubPagesUrl(
 	repoName: string,
 	owner = DEFAULT_CONFIG.owner,
 ): string {
-	const cleanRepo = repoName.trim().replace(/^\/+|\/+$/g, "");
+	const cleanRepo = repoName.trim().replace(/^(?:\/+)|(?:\/+)$/g, "");
 	return `https://${owner.toLowerCase()}.github.io/${cleanRepo}/`;
 }
 
