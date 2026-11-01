@@ -168,8 +168,11 @@ async function enableCommand(owner, repoName, flags) {
 	if (enableOutput) {
 		try {
 			const res = JSON.parse(enableOutput);
+			const pagesUrl =
+				res.html_url ||
+				`https://${owner.toLowerCase()}.github.io/${repoName}/`;
 			console.log(`\n✅ GitHub Pages enabled successfully!`);
-			console.log(`   原始 URL:   ${res.html_url || `https://${owner.toLowerCase()}.github.io/${repoName}/`}`);
+			console.log(`   原始 URL:   ${pagesUrl}`);
 			console.log(`   国内镜像:   https://${DEFAULT_DOMAIN}/repo/${repoName}/`);
 			console.log(`   EdgeOne 将在 GitHub 构建完毕后自动提供加速反代与边缘缓存。\n`);
 			return;

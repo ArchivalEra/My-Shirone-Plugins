@@ -192,9 +192,8 @@ async function runApps(appIds, outPath) {
 				if (minutes > 0) meta.hours = Math.round((minutes / 60) * 10) / 10;
 				if (last > 0) {
 					const days = Math.floor((Date.now() / 1000 - last) / 86400);
-					console.log(
-						`ok（${meta.name}；最近游玩 ${days === 0 ? "今天" : `${days} 天前`}）`,
-					);
+					const when = days === 0 ? "今天" : `${days} 天前`;
+					console.log(`ok（${meta.name}；最近游玩 ${when}）`);
 				} else {
 					console.log(`ok（${meta.name}）`);
 				}

@@ -286,10 +286,12 @@ async function main() {
 	const accelerated = inventory.entries.filter((entry) => entry.accelerated).length;
 	const skipped = discovered.length - names.length;
 
+	const skippedNote = skipped > 0 ? ` · ${skipped} excluded/private` : "";
+
 	console.log(
 		`[repo-inventory] ${inventory.entries.length}/${names.length} repositories ` +
 			`(ready ${counts.ready} · absent ${counts.absent} · pending ${counts.pending} · ` +
-			`accelerated ${accelerated})${skipped > 0 ? ` · ${skipped} excluded/private` : ""} -> ${outPath}`,
+			`accelerated ${accelerated})${skippedNote} -> ${outPath}`,
 	);
 
 	const known = new Set(names);
