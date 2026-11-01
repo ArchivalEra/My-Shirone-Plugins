@@ -9,7 +9,6 @@ import type {
 	DynamicSvgOptions,
 	DynamicSvgPretextConfig,
 	PretextLayoutResult,
-	PretextMeasurerOptions,
 } from "./types.js";
 
 export * from "./types.js";
@@ -264,11 +263,11 @@ function applyPretextLayout(
 		} else {
 			// Arithmetic CJK/Latin tokenization fallback (Intl.Segmenter based)
 			const words =
-				typeof Intl !== "undefined" && (Intl as any).Segmenter
+				typeof Intl !== "undefined" && Intl.Segmenter
 					? [
-							...new (Intl as any).Segmenter(undefined, {
-								granularity: "word",
-							}).segment(textContent),
+							...new Intl.Segmenter(undefined, { granularity: "word" }).segment(
+								textContent,
+							),
 						].map((s: any) => s.segment)
 					: textContent.split(/\s+/);
 
@@ -349,7 +348,7 @@ export function rehypeDynamicSvg(options: DynamicSvgOptions = {}) {
 				if (!svgElement) return;
 
 				// Ensure SVG properties for accessibility & M3 dynamic theming
-				const svgProps = (svgElement as any).properties || {};
+				const svgProps = svgElement.properties || {};
 				const originalProps = node.properties || {};
 
 				// Preserve or set accessible description
