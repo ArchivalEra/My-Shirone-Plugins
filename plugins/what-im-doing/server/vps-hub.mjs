@@ -482,6 +482,36 @@ function readBodyBuffer(req) {
 	});
 }
 
+/**
+ * Decode a protobuf upload and store it, returning how many events landed.
+ *
+ * Two wire shapes arrive on the same endpoint: a batch of events, and a single
+ * device report. A single report does not decode as a batch, so a batch failure
+ * is not an error - it means "try the single shape before giving up".
+ */
+function ingestProtobuf(u8) {
+	try {
+		const batch = decodeBatchUploadRequest(u8);
+		if (batch.events && batch.events.length > 0) {
+			store.recordBatch(batch.events);
+			return batch.events.length;
+		}
+		return 0;
+	} catch {
+		const single = decodeDeviceActivity(u8);
+		if (!single.deviceId) return 0;
+		store.record(single);
+		return 1;
+	}
+}
+
+/** Broadcast the new snapshot and answer with the accepted-event count. */
+function acceptEvents(res, count) {
+	broadcastSSE(store.getBriefResponse());
+	res.writeHead(200, { ...CORS_HEADERS, "Content-Type": "application/json" });
+	res.end(JSON.stringify({ success: true, count }));
+}
+
 async function handlePost(req, res, url) {
 	const contentType = req.headers["content-type"] || "";
 	const authHeader = req.headers.authorization || "";
@@ -515,33 +545,16 @@ async function handlePost(req, res, url) {
 		}
 
 		if (u8) {
-			try {
-				const batch = decodeBatchUploadRequest(u8);
-				if (batch.events && batch.events.length > 0) {
-					store.recordBatch(batch.events);
-					broadcastSSE(store.getBriefResponse());
-					res.writeHead(200, { ...CORS_HEADERS, "Content-Type": "application/json" });
-					res.end(JSON.stringify({ success: true, count: batch.events.length }));
-					return;
-				}
-			} catch {
-				const single = decodeDeviceActivity(u8);
-				if (single.deviceId) {
-					store.record(single);
-					broadcastSSE(store.getBriefResponse());
-					res.writeHead(200, { ...CORS_HEADERS, "Content-Type": "application/json" });
-					res.end(JSON.stringify({ success: true, count: 1 }));
-					return;
-				}
-			}
+			const ingested = ingestProtobuf(u8);
+			if (ingested > 0) return acceptEvents(res, ingested);
 		} else if (body) {
-			// JSON ingestion (supports standard and Mix Space / Shiro formats)
+			// JSON ingestion (supports standard and Mix Space / Shiro formats).
+			// An empty `events` array is accepted as a zero-count success rather
+			// than rejected: that is the behaviour this endpoint has always had,
+			// and a collector flushing an empty window should not see a 400.
 			if (Array.isArray(body.events)) {
 				store.recordBatch(body.events);
-				broadcastSSE(store.getBriefResponse());
-				res.writeHead(200, { ...CORS_HEADERS, "Content-Type": "application/json" });
-				res.end(JSON.stringify({ success: true, count: body.events.length }));
-				return;
+				return acceptEvents(res, body.events.length);
 			}
 
 			const hasValidField =
@@ -553,10 +566,7 @@ async function handlePost(req, res, url) {
 
 			if (hasValidField) {
 				store.record(body);
-				broadcastSSE(store.getBriefResponse());
-				res.writeHead(200, { ...CORS_HEADERS, "Content-Type": "application/json" });
-				res.end(JSON.stringify({ success: true, count: 1 }));
-				return;
+				return acceptEvents(res, 1);
 			}
 		}
 
