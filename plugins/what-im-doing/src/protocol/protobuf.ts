@@ -16,7 +16,7 @@ const WIRE_LENGTH_DELIMITED = 2;
  * Lightweight Protobuf binary writer
  */
 export class ProtoWriter {
-	private chunks: Uint8Array[] = [];
+	private readonly chunks: Uint8Array[] = [];
 	private size = 0;
 
 	writeTag(fieldNo: number, wireType: number): void {
@@ -82,7 +82,7 @@ export class ProtoWriter {
 export class ProtoReader {
 	private pos = 0;
 
-	constructor(private buffer: Uint8Array) {}
+	constructor(private readonly buffer: Uint8Array) {}
 
 	get hasMore(): boolean {
 		return this.pos < this.buffer.length;

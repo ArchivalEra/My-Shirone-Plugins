@@ -54,7 +54,7 @@ export type EngineHandler<T> = (payload: T) => void;
  * surface can hand the array straight back to an effect cleanup.
  */
 export class EngineEmitter {
-	private handlers = new Map<string, Set<(payload: unknown) => void>>();
+	private readonly handlers = new Map<string, Set<(payload: unknown) => void>>();
 
 	on<K extends keyof EngineEvents>(
 		event: K,

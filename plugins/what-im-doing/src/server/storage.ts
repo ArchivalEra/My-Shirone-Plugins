@@ -7,10 +7,10 @@ import type {
  * In-memory / dev server activity store with configurable history capacity
  */
 export class ActivityStore {
-	private devices = new Map<string, DeviceActivity>();
+	private readonly devices = new Map<string, DeviceActivity>();
 	private history: DeviceActivity[] = [];
 
-	constructor(private maxStorageItems = 5000) {}
+	constructor(private readonly maxStorageItems = 5000) {}
 
 	/**
 	 * Records a new activity event (supports Mix Space and Shiro format)
