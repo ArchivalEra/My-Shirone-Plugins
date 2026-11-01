@@ -19,11 +19,12 @@ cd "$REPO"
 if [ -f zreflect/facts.py ]; then
   [ -f reflect-hooks/Einfacht.env ] && . reflect-hooks/Einfacht.env
   DOC="${REFLECT_DOC:-STATE.md}"
+  # pre-push **不自动改文件、不动历史**（上游纪律）：只 --check 不新鲜就拒推，
+  # 强制先提交再推。真要重渲染是 pre-commit 的活（它会 git add）。
   if [ -f "$DOC" ]; then
-    python3 zreflect/facts.py --render-doc "$DOC" || exit 1
-    git add "$DOC" 2>/dev/null || true
+    python3 zreflect/facts.py --check "$DOC" || exit 1
   fi
-  python3 zreflect/registry.py --run pre-push || exit 1
+  python3 zreflect/registry.py --run commit || exit 1
 fi
 
 remote="$1"
