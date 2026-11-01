@@ -85,6 +85,19 @@ export function resolveSvgPath(
 }
 
 /**
+ * Normalise a HAST `className` into a string array.
+ *
+ * HAST allows either form: an array of names, or one whitespace-delimited
+ * string. Two call sites in this file needed the same three-way decision, and
+ * writing it twice as a nested ternary made the intent hard to read at a glance.
+ */
+function normalizeClasses(value: unknown): string[] {
+	if (Array.isArray(value)) return value as string[];
+	if (typeof value === "string") return value.split(/\s+/);
+	return [];
+}
+
+/**
  * Lightweight XML/SVG parser producing compliant HAST element trees with zero external dependencies.
  */
 export function parseSvgToHast(svgStr: string): any {
@@ -368,16 +381,8 @@ export function rehypeDynamicSvg(options: DynamicSvgOptions = {}) {
 
 				// Merge CSS classes
 				const baseClass = options.className || "dynamic-svg";
-				const existingClasses = Array.isArray(svgProps.className)
-					? svgProps.className
-					: typeof svgProps.className === "string"
-						? svgProps.className.split(/\s+/)
-						: [];
-				const origClasses = Array.isArray(originalProps.className)
-					? originalProps.className
-					: typeof originalProps.className === "string"
-						? originalProps.className.split(/\s+/)
-						: [];
+				const existingClasses = normalizeClasses(svgProps.className);
+				const origClasses = normalizeClasses(originalProps.className);
 
 				svgProps.className = Array.from(
 					new Set([...existingClasses, ...origClasses, baseClass]),
