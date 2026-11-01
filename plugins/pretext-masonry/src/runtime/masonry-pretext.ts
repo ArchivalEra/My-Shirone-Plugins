@@ -86,7 +86,7 @@ export function packMasonry(container: HTMLElement): void {
 		const measurements = cards.map((card) => {
 			const metrics = predictCardMetrics(card, colWidth, tokens);
 			const gridColumnEnd = getComputedStyle(card).gridColumnEnd;
-			const spanMatch = gridColumnEnd.match(/span\s+(\d+)/);
+			const spanMatch = /span\s+(\d+)/.exec(gridColumnEnd);
 			const dataSpan = Number.parseInt(card.dataset.masonrySpan ?? "", 10);
 			const span = Math.min(
 				Math.max(

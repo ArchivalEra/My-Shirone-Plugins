@@ -22,7 +22,7 @@ export function packMasonryDomFallback(
 	const measurements = cards.map((card) => {
 		const height = card.offsetHeight;
 		const gridColumnEnd = getComputedStyle(card).gridColumnEnd;
-		const spanMatch = gridColumnEnd.match(/span\s+(\d+)/);
+		const spanMatch = /span\s+(\d+)/.exec(gridColumnEnd);
 		const dataSpan = Number.parseInt(card.dataset.masonrySpan ?? "", 10);
 		const span = Math.min(
 			Math.max(
