@@ -184,6 +184,139 @@ const CORS_HEADERS = {
 	"Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
 };
 
+/**
+ * Multi-device arbitration order: active devices first (status ACTIVE with
+ * under 180s idle), then lower idle, then most recent timestamp. Extracted so
+ * the comparator's three tiers are stated once instead of inline in `fetch`.
+ */
+function compareDevices(a, b) {
+	const aIsActive = (a.status === 1 || a.status === "ACTIVE") && (a.idleSeconds || 0) < 180 ? 1 : 0;
+	const bIsActive = (b.status === 1 || b.status === "ACTIVE") && (b.idleSeconds || 0) < 180 ? 1 : 0;
+	if (aIsActive !== bIsActive) return bIsActive - aIsActive;
+	if ((a.idleSeconds || 0) !== (b.idleSeconds || 0)) {
+		return (a.idleSeconds || 0) - (b.idleSeconds || 0);
+	}
+	return b.timestamp - a.timestamp;
+}
+
+async function handleRead(request, env) {
+	const accept = request.headers.get("accept") ?? "";
+	let history = [];
+	let devices = [];
+
+	if (env?.ACTIVITY_KV) {
+		const raw = await env.ACTIVITY_KV.get("activity:history", "json");
+		if (Array.isArray(raw)) history = raw;
+
+		const rawDevices = await env.ACTIVITY_KV.get("activity:devices", "json");
+		if (rawDevices && typeof rawDevices === "object") {
+			devices = Object.values(rawDevices);
+		}
+	}
+
+	devices.sort(compareDevices);
+	const current = devices.length > 0 ? devices[0] : null;
+
+	const responseData = {
+		current,
+		devices,
+		history: history.slice(0, 10),
+		serverTime: Date.now(),
+	};
+
+	if (accept.includes("application/x-protobuf")) {
+		const bytes = encodeHistoryResponse(responseData);
+		return new Response(bytes, {
+			status: 200,
+			headers: {
+				...CORS_HEADERS,
+				"Content-Type": "application/x-protobuf",
+				"Cache-Control": "public, max-age=10",
+			},
+		});
+	}
+
+	return new Response(JSON.stringify(responseData), {
+		status: 200,
+		headers: {
+			...CORS_HEADERS,
+			"Content-Type": "application/json; charset=utf-8",
+			"Cache-Control": "public, max-age=10",
+		},
+	});
+}
+
+function jsonResponse(payload, status) {
+	return new Response(JSON.stringify(payload), {
+		status,
+		headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+	});
+}
+
+/** Decode an upload body into a flat event list, supporting both wire formats. */
+async function parseUpload(request, contentType) {
+	const events = [];
+
+	if (contentType.includes("application/x-protobuf")) {
+		const buffer = await request.arrayBuffer();
+		const bytes = new Uint8Array(buffer);
+		try {
+			const batch = decodeBatchUploadRequest(bytes);
+			events.push(...batch.events);
+		} catch {
+			// A single-device payload does not decode as a batch; fall back to
+			// the single-event wire format rather than rejecting the upload.
+			const single = decodeDeviceActivity(bytes);
+			if (single.deviceId) events.push(single);
+		}
+		return events;
+	}
+
+	const body = await request.json();
+	if (Array.isArray(body.events)) events.push(...body.events);
+	else if (body.deviceId) events.push(body);
+	return events;
+}
+
+async function handleWrite(request, env) {
+	if (env?.AUTH_TOKEN) {
+		const auth = request.headers.get("authorization") ?? "";
+		if (auth !== `Bearer ${env.AUTH_TOKEN}`) {
+			return jsonResponse({ error: "Unauthorized" }, 401);
+		}
+	}
+
+	const contentType = request.headers.get("content-type") ?? "";
+
+	try {
+		const newEvents = await parseUpload(request, contentType);
+		if (newEvents.length === 0) {
+			return jsonResponse({ error: "No events parsed" }, 400);
+		}
+
+		if (env?.ACTIVITY_KV) {
+			let history = (await env.ACTIVITY_KV.get("activity:history", "json")) || [];
+			const devices = (await env.ACTIVITY_KV.get("activity:devices", "json")) || {};
+
+			for (const ev of newEvents) {
+				if (!ev.timestamp) ev.timestamp = Date.now();
+				devices[ev.deviceId] = ev;
+				history.unshift(ev);
+			}
+
+			// Retain up to 3000 items in KV for personal telemetry inspection
+			if (history.length > 3000) history = history.slice(0, 3000);
+
+			await env.ACTIVITY_KV.put("activity:history", JSON.stringify(history));
+			await env.ACTIVITY_KV.put("activity:devices", JSON.stringify(devices));
+		}
+
+		return jsonResponse({ success: true, count: newEvents.length }, 200);
+	} catch (err) {
+		return jsonResponse({ error: err.message }, 500);
+	}
+}
+
 export default {
 	async fetch(request, env) {
 		const { method } = request;
@@ -193,128 +326,11 @@ export default {
 		}
 
 		if (method === "GET") {
-			const accept = request.headers.get("accept") ?? "";
-			let history = [];
-			let devices = [];
-
-			if (env?.ACTIVITY_KV) {
-				const raw = await env.ACTIVITY_KV.get("activity:history", "json");
-				if (Array.isArray(raw)) history = raw;
-
-				const rawDevices = await env.ACTIVITY_KV.get("activity:devices", "json");
-				if (rawDevices && typeof rawDevices === "object") {
-					devices = Object.values(rawDevices);
-				}
-			}
-
-			// Smart Multi-Device Arbitration:
-			// Active devices (idle < 180s) take precedence over idle devices;
-			// lower idle time wins; later timestamp breaks ties.
-			devices.sort((a, b) => {
-				const aIsActive = (a.status === 1 || a.status === "ACTIVE") && (a.idleSeconds || 0) < 180 ? 1 : 0;
-				const bIsActive = (b.status === 1 || b.status === "ACTIVE") && (b.idleSeconds || 0) < 180 ? 1 : 0;
-				if (aIsActive !== bIsActive) return bIsActive - aIsActive;
-				if ((a.idleSeconds || 0) !== (b.idleSeconds || 0)) {
-					return (a.idleSeconds || 0) - (b.idleSeconds || 0);
-				}
-				return b.timestamp - a.timestamp;
-			});
-			const current = devices.length > 0 ? devices[0] : null;
-
-			const responseData = {
-				current,
-				devices,
-				history: history.slice(0, 10),
-				serverTime: Date.now(),
-			};
-
-			if (accept.includes("application/x-protobuf")) {
-				const bytes = encodeHistoryResponse(responseData);
-				return new Response(bytes, {
-					status: 200,
-					headers: {
-						...CORS_HEADERS,
-						"Content-Type": "application/x-protobuf",
-						"Cache-Control": "public, max-age=10",
-					},
-				});
-			}
-
-			return new Response(JSON.stringify(responseData), {
-				status: 200,
-				headers: {
-					...CORS_HEADERS,
-					"Content-Type": "application/json; charset=utf-8",
-					"Cache-Control": "public, max-age=10",
-				},
-			});
+			return handleRead(request, env);
 		}
 
 		if (method === "POST") {
-			if (env?.AUTH_TOKEN) {
-				const auth = request.headers.get("authorization") ?? "";
-				if (auth !== `Bearer ${env.AUTH_TOKEN}`) {
-					return new Response(JSON.stringify({ error: "Unauthorized" }), {
-						status: 401,
-						headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-					});
-				}
-			}
-
-			const contentType = request.headers.get("content-type") ?? "";
-			const newEvents = [];
-
-			try {
-				if (contentType.includes("application/x-protobuf")) {
-					const buffer = await request.arrayBuffer();
-					const bytes = new Uint8Array(buffer);
-					try {
-						const batch = decodeBatchUploadRequest(bytes);
-						newEvents.push(...batch.events);
-					} catch {
-						const single = decodeDeviceActivity(bytes);
-						if (single.deviceId) newEvents.push(single);
-					}
-				} else {
-					const body = await request.json();
-					if (Array.isArray(body.events)) newEvents.push(...body.events);
-					else if (body.deviceId) newEvents.push(body);
-				}
-
-				if (newEvents.length === 0) {
-					return new Response(JSON.stringify({ error: "No events parsed" }), {
-						status: 400,
-						headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-					});
-				}
-
-				if (env?.ACTIVITY_KV) {
-					let history = (await env.ACTIVITY_KV.get("activity:history", "json")) || [];
-					const devices = (await env.ACTIVITY_KV.get("activity:devices", "json")) || {};
-
-					for (const ev of newEvents) {
-						if (!ev.timestamp) ev.timestamp = Date.now();
-						devices[ev.deviceId] = ev;
-						history.unshift(ev);
-					}
-
-					// Retain up to 3000 items in KV for personal telemetry inspection
-					if (history.length > 3000) history = history.slice(0, 3000);
-
-					await env.ACTIVITY_KV.put("activity:history", JSON.stringify(history));
-					await env.ACTIVITY_KV.put("activity:devices", JSON.stringify(devices));
-				}
-
-				return new Response(JSON.stringify({ success: true, count: newEvents.length }), {
-					status: 200,
-					headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-				});
-			} catch (err) {
-				return new Response(JSON.stringify({ error: err.message }), {
-					status: 500,
-					headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-				});
-			}
+			return handleWrite(request, env);
 		}
 
 		return new Response("Method not allowed", { status: 405, headers: CORS_HEADERS });
