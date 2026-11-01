@@ -5,7 +5,7 @@
  * and generates/updates ~/.config/what-im-doing.json.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { hostname, homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 

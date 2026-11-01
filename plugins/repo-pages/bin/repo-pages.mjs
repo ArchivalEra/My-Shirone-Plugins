@@ -5,8 +5,6 @@
  */
 
 import { execSync } from "node:child_process";
-import fs from "node:fs";
-import path from "node:path";
 
 const DEFAULT_OWNER = "ArchivalEra";
 const DEFAULT_DOMAIN = "isui.ren";
