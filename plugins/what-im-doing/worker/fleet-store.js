@@ -29,6 +29,56 @@ function resolveServiceName(service) {
 	return "origin-cache";
 }
 
+/** Form-factor precedence when an active device is chosen over another active one. */
+const TYPE_PRIORITY = {
+	desktop: 3,
+	laptop: 2,
+	server: 1,
+	mobile: 1,
+	other: 0,
+};
+
+/** A device is "in use" when its status is ACTIVE and it has been idle under 180s. */
+function isInUse(device) {
+	return device.status === 1 && (device.idleSeconds || 0) < 180;
+}
+
+/**
+ * Ordering for "which device is the user currently on", highest first.
+ *
+ * The five tiers are ordered as the surrounding comment states them, and the
+ * function exists so that comment has one place to describe instead of a
+ * comparator inside a sort call:
+ *
+ *   1. Online beats offline.
+ *   2. In use beats idle/away.
+ *   3. Form factor: desktop > laptop > server/mobile > other.
+ *   4. Lower idle time wins.
+ *   5. Ties fall to the more recently seen device; offline pairs order by the
+ *      same recency, last seen being all they have left to compare.
+ */
+function compareDevicesForCurrent(a, b) {
+	if (!a.offline && b.offline) return -1;
+	if (a.offline && !b.offline) return 1;
+
+	if (!a.offline && !b.offline) {
+		const aActive = isInUse(a);
+		const bActive = isInUse(b);
+		if (aActive && !bActive) return -1;
+		if (!aActive && bActive) return 1;
+
+		const priDiff = (TYPE_PRIORITY[b.type] || 0) - (TYPE_PRIORITY[a.type] || 0);
+		if (priDiff !== 0) return priDiff;
+
+		const idleDiff = (a.idleSeconds || 0) - (b.idleSeconds || 0);
+		if (idleDiff !== 0) return idleDiff;
+
+		return (b.lastSeen || 0) - (a.lastSeen || 0);
+	}
+
+	return b.lastSeen - a.lastSeen;
+}
+
 /**
  * Parses and validates a Cloudflare Tunnel token (base64 encoded JSON { a, t, s })
  */
@@ -457,39 +507,9 @@ export class FleetStore {
 			};
 		});
 
-		// Multi-Device Arbitration:
-		// 1. Online devices always beat offline devices;
-		// 2. An actively used device (status == 1 && idle < 180s) strictly beats an idle/away device regardless of form-factor;
-		// 3. Among devices with same activity level, prefer desktop > laptop > server > mobile > other;
-		// 4. Lowest idleSeconds wins;
-		// 5. If all offline, choose the most recently seen device.
-		const typePriority = {
-			desktop: 3,
-			laptop: 2,
-			server: 1,
-			mobile: 1,
-			other: 0,
-		};
-		const sorted = [...processedDevices].sort((a, b) => {
-			if (!a.offline && b.offline) return -1;
-			if (a.offline && !b.offline) return 1;
-			if (!a.offline && !b.offline) {
-				const aActive = a.status === 1 && (a.idleSeconds || 0) < 180;
-				const bActive = b.status === 1 && (b.idleSeconds || 0) < 180;
-				if (aActive && !bActive) return -1;
-				if (!aActive && bActive) return 1;
-
-				const priDiff =
-					(typePriority[b.type] || 0) - (typePriority[a.type] || 0);
-				if (priDiff !== 0) return priDiff;
-
-				const idleDiff = (a.idleSeconds || 0) - (b.idleSeconds || 0);
-				if (idleDiff !== 0) return idleDiff;
-
-				return (b.lastSeen || 0) - (a.lastSeen || 0);
-			}
-			return b.lastSeen - a.lastSeen;
-		});
+		// Multi-device arbitration order lives in `compareDevicesForCurrent`, where
+		// the five tiers are documented next to the code that applies them.
+		const sorted = [...processedDevices].sort(compareDevicesForCurrent);
 
 		const current = sorted.length > 0 ? sorted[0] : null;
 
