@@ -15,15 +15,17 @@ set -euo pipefail
 REPO="$(git rev-parse --show-toplevel 2>/dev/null || echo .)"
 cd "$REPO"
 
-# ── ① Einfacht：机器块重渲染 + pre-push 相位闸门 ──────────────────────────
+# ── ① Einfacht：机器块校验 + pre-push 相位闸门 ─────────────────────────────
+# env 载体在仓库根 Einfacht.env（新版解析顺序：钩子目录优先、仓根次之；本仓
+# 载体放仓根 —— vendored 形态下钩子目录里的活 env 会被套件自证夹具原样拷走，
+# 仓根载体不进夹具）。加载走可拔插件 einfacht-env.sh：它先找 reflect-hooks/
+# 再找仓根，都没有就什么也不做（回落默认名）。
 if [ -f zreflect/facts.py ]; then
-  [ -f reflect-hooks/Einfacht.env ] && . reflect-hooks/Einfacht.env
-  DOC="${REFLECT_DOC:-STATE.md}"
-  # pre-push **不自动改文件、不动历史**（上游纪律）：只 --check 不新鲜就拒推，
-  # 强制先提交再推。真要重渲染是 pre-commit 的活（它会 git add）。
-  if [ -f "$DOC" ]; then
-    python3 zreflect/facts.py --check "$DOC" || exit 1
-  fi
+  [ -f reflect-hooks/einfacht-env.sh ] && . reflect-hooks/einfacht-env.sh
+  # pre-push **不自动改文件、不动历史**（上游纪律）：--check 校验全部机器块
+  # 文档（新版覆盖 STATE.md + PRINCIPLES.md；不用原则文档的仓设
+  # REFLECT_NO_PRINCIPLES=1 opt-out），块不新鲜就拒推，强制先提交再推。
+  python3 zreflect/facts.py --check || exit 1
   python3 zreflect/registry.py --run commit || exit 1
 fi
 
