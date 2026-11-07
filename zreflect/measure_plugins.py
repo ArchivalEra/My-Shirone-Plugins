@@ -50,6 +50,7 @@ def measure():
 
     # ── 插件数量 ────────────────────────────────────────────────────────────
     dirs = _plugin_dirs()
+    # PINNED: note 写进 FACTS.json/STATE.md 机器块并逐字节对账，固定语言是契约。
     facts["plugins"] = fact(
         len(dirs),
         "ls -d plugins/*/ | wc -l",
@@ -58,6 +59,7 @@ def measure():
     )
 
     # ── 插件名录（防止重命名/增删静默发生）──────────────────────────────────
+    # PINNED: 同上 —— note 随机器块落盘，不跟随 REFLECT_LANG。
     facts["plugin_names"] = fact(
         _plugin_names_joined(),
         "ls -d plugins/*/ | sed 's|plugins/||;s|/$||' | tr '\\n' ',' | sed 's/,$//'",
@@ -71,10 +73,12 @@ def measure():
         out = subprocess.run(
             ["bash", "-c", "find plugins -name '*.test.mjs' -not -path '*/node_modules/*' | wc -l"],
             cwd=ROOT, capture_output=True, text=True, timeout=60,
+            encoding="utf-8", errors="replace",
         )
         n_tests = int(out.stdout.strip() or 0) if out.returncode == 0 else -1
     except (OSError, subprocess.SubprocessError, ValueError):
         n_tests = -1
+    # PINNED: 同上 —— note 随机器块落盘，不跟随 REFLECT_LANG。
     facts["test_files"] = fact(
         n_tests,
         "find plugins -name '*.test.mjs' -not -path '*/node_modules/*' | wc -l",
@@ -84,6 +88,7 @@ def measure():
 
     # ── 有测试的插件数 ──────────────────────────────────────────────────────
     with_tests = [n for n in dirs if os.path.isdir(os.path.join(PLUGINS_DIR, n, "tests"))]
+    # PINNED: 同上 —— note 随机器块落盘，不跟随 REFLECT_LANG。
     facts["plugins_with_tests"] = fact(
         len(with_tests),
         "ls -d plugins/*/tests 2>/dev/null | wc -l",
@@ -93,6 +98,7 @@ def measure():
 
     # ── 无测试的插件（值为插件名清单；空串 = 全都有测试）────────────────────
     without = [n for n in dirs if n not in with_tests]
+    # PINNED: 同上 —— note 随机器块落盘，不跟随 REFLECT_LANG。
     facts["plugins_without_tests"] = fact(
         ",".join(without),
         (
