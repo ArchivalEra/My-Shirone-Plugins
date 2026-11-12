@@ -1,0 +1,113 @@
+name: Code quality assessment
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 6 * * 1'
+  pull_request:
+
+permissions:
+  contents: read
+
+# Local equivalent of GitHub Code Quality (Team/Enterprise-only paid product).
+# Runs the gates this repo already owns: Einfacht zreflect suite, plugin unit
+# tests and TypeScript checks. Results land in the PR/weekly step summary.
+jobs:
+  assess:
+    name: Assess My-Shirone-Plugins
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install ruff (suite static gate)
+        run: pip install 'ruff==0.17.3'
+
+      - name: Install plugin dependencies
+        # Each plugin owns its node_modules locally; CI installs only where a
+        # package.json exists. pnpm 10 ignored-builds policy must not be read
+        # as a code failure (see docs/gitroll-2026-11-01-report.md).
+        continue-on-error: true
+        shell: bash
+        run: |
+          for d in plugins/*/; do
+            if [ -f "$d/package.json" ]; then
+              (cd "$d" && npm install --ignore-scripts --no-audit --no-fund) || true
+            fi
+          done
+
+      - name: Run checks
+        id: checks
+        shell: bash
+        run: |
+          set +e
+          : > results.tsv
+          record() { printf '%s\t%s\t%s\n' "$1" "$2" "$3" >> results.tsv; }
+
+          bash -c 'set -a; . ./Einfacht.env; set +a; python3 zreflect/registry.py --run commit' > /tmp/gates.log 2>&1
+          gates=$?; record 'zreflect-commit-gates' 'registry.py --run commit' "$gates"
+
+          bash -c 'set -a; . ./Einfacht.env; set +a; python3 zreflect/harness.py' > /tmp/harness.log 2>&1
+          harness=$?; record 'harness-selftest' 'zreflect/harness.py' "$harness"
+
+          find plugins -name '*.test.mjs' -not -path '*/node_modules/*' | sort > /tmp/tests.txt
+          n_tests=$(wc -l < /tmp/tests.txt)
+          fail=0
+          while IFS= read -r t; do
+            node --test "$t" > /tmp/plugin-tests.log 2>&1 || fail=$((fail+1))
+          done < /tmp/tests.txt
+          record 'plugin-unit-tests' "$n_tests files (node --test)" "$fail"
+
+          n_tsc=0; fail=0
+          for d in plugins/*/; do
+            [ -f "$d/tsconfig.json" ] || continue
+            n_tsc=$((n_tsc+1))
+            if [ -x "$d/node_modules/.bin/tsc" ]; then
+              (cd "$d" && ./node_modules/.bin/tsc --noEmit) >> /tmp/tsc.log 2>&1 || fail=$((fail+1))
+            elif command -v tsc >/dev/null; then
+              (cd "$d" && tsc --noEmit) >> /tmp/tsc.log 2>&1 || fail=$((fail+1))
+            fi
+          done
+          record 'plugin-typescript' "$n_tsc tsconfigs (tsc --noEmit)" "$fail"
+
+          cat results.tsv
+
+      - name: Publish summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Code quality assessment — My-Shirone-Plugins"
+            echo ""
+            echo "| Check | Command | Result |"
+            echo "|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -f results.tsv ]; then
+            while IFS=$'\t' read -r n c rc; do
+              badge=$([ "$rc" = "0" ] && echo PASS || echo "FAIL (rc=$rc)")
+              printf '| %s | \`%s\` | %s |\n' "$n" "$c" "$badge" >> "$GITHUB_STEP_SUMMARY"
+            done < results.tsv
+          else
+            echo "| (no results) | — | — |" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Note: GitRoll round-3 163 findings are 85% external bytes (vendored Einfacht); see issue #9." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-logs
+          path: /tmp/*.log
+          if-no-files-found: ignore
