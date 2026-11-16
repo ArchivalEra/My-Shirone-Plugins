@@ -123,6 +123,35 @@ test("list carries a repository icon data URI through, and defaults an absent on
 	assert.equal(inventory.entries[1].icon, "");
 });
 
+test("list carries a site icon through and defaults it to empty", async () => {
+	const adapter = makeAdapter({
+		factsByName: {
+			alpha: {
+				hasPages: true,
+				pushedAt: "",
+				status: "built",
+				siteIcon: "data:image/png;base64,iVBORw0KGgo=",
+			},
+			beta: { hasPages: true, pushedAt: "", status: "built" },
+		},
+	});
+	const inventory = await list(["alpha", "beta"], adapter);
+	assert.equal(inventory.entries[0].siteIcon, "data:image/png;base64,iVBORw0KGgo=");
+	assert.equal(inventory.entries[1].siteIcon, "");
+});
+
+test("list defaults the inferred category to 'other' when the adapter supplies none", async () => {
+	const adapter = makeAdapter({
+		factsByName: {
+			alpha: { hasPages: false, pushedAt: "", status: null, category: "tool" },
+			beta: { hasPages: false, pushedAt: "", status: null },
+		},
+	});
+	const inventory = await list(["alpha", "beta"], adapter);
+	assert.equal(inventory.entries[0].category, "tool");
+	assert.equal(inventory.entries[1].category, "other");
+});
+
 test("list reports an absent description and language as empty, not undefined", async () => {
 	const adapter = makeAdapter({
 		factsByName: { alpha: { hasPages: false, pushedAt: "", status: null } },

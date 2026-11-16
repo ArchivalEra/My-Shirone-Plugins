@@ -47,6 +47,25 @@ export interface RepoState {
 	 * list. Kept as a data URI so consumers render it with zero runtime requests.
 	 */
 	icon: string;
+	/**
+	 * Site icon: the favicon the repository's **published site** declares, inlined
+	 * the same way as `icon` (empty when the repository publishes no site, or the
+	 * site declares no icon). Consumers prefer this over `icon`: a project's public
+	 * face is its site, not its source tree.
+	 *
+	 * Resolved without a browser: the repository's Pages URL (or the cluster's
+	 * `/repo/<name>/` mirror) is fetched at build time and its `<link rel=icon>`
+	 * read. An unreachable site is an omission, never a guess.
+	 */
+	siteIcon?: string;
+	/**
+	 * Category inferred from machine facts only — no editorial judgement:
+	 * a repository that publishes a site with a `theme`/`app`-shaped name or whose
+	 * language/description points at one still gets `other` unless a consumer
+	 * overrides it. Kept as a coarse bucket so the page can group without a
+	 * hand-written table; `other` is the honest default.
+	 */
+	category?: string;
 }
 
 export interface RepoInventory {
@@ -70,6 +89,10 @@ export interface RepoFacts {
 	url?: string;
 	/** Repository icon as a data URI; omitted/empty when the repository has none. */
 	icon?: string;
+	/** Icon declared by the repository's published site; omitted/empty when none. */
+	siteIcon?: string;
+	/** Machine-inferred category bucket (see `RepoState.category`). */
+	category?: string;
 }
 
 /**
@@ -141,6 +164,8 @@ function buildInventory(
 			language: found.language ?? null,
 			url: found.url ?? "",
 			icon: found.icon ?? "",
+			siteIcon: found.siteIcon ?? "",
+			category: found.category ?? "other",
 		});
 	}
 	return {

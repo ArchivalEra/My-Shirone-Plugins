@@ -22,6 +22,11 @@ import {
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
+/** Site-icon probing limits: a slow site must not stall the whole inventory. */
+const SITE_ICON_TIMEOUT_MS = 8000;
+/** Cap for inlined icons — favicons are a few KB; anything larger is not one. */
+const MAX_ICON_BYTES = 256 * 1024;
+
 const DEFAULTS = {
 	owner: "ArchivalEra",
 	mirrorRepo: "isui.ren-heart",
@@ -130,7 +135,156 @@ function makeAdapter({ api, owner, mirrorRepo, mirrorBranch, mirrorDir, token })
 		gif: "image/gif",
 		jpg: "image/jpeg",
 		jpeg: "image/jpeg",
+		ico: "image/x-icon",
 	};
+
+	/**
+	 * Category buckets inferred from machine facts only. Deliberately coarse and
+	 * ordered: first match wins, `other` is the honest default when nothing
+	 * matches. No editorial knowledge lives here — a repository's name, language
+	 * and description are the only inputs.
+	 */
+	const CATEGORY_RULES = [
+		{
+			key: "theme",
+			test: (f) => /theme|blog|shirone/i.test(f.name),
+		},
+		{
+			key: "site",
+			test: (f) => f.hasPages && /\.ren$|isui/i.test(f.name),
+		},
+		{
+			key: "tool",
+			test: (f) =>
+				["Shell", "C", "C++", "Assembly", "Makefile"].includes(f.language ?? ""),
+		},
+		{
+			key: "app",
+			test: (f) =>
+				["Rust", "TypeScript", "JavaScript", "Go", "Python", "C#", "Kotlin", "Swift"].includes(
+					f.language ?? "",
+				),
+		},
+	];
+
+	/** @param {{name:string,hasPages:boolean,language:string|null,description:string}} facts */
+	function inferCategory(facts) {
+		for (const rule of CATEGORY_RULES) {
+			try {
+				if (rule.test(facts)) return rule.key;
+			} catch {
+				/* a rule that cannot read the facts simply does not match */
+			}
+		}
+		return "other";
+	}
+
+	/**
+	 * Read the favicon a repository's **published site** declares.
+	 *
+	 * Covers both hosting arrangements the cluster uses: a GitHub Pages site at
+	 * `<owner>.github.io/<name>/`, and the cluster mirror at
+	 * `https://isui.ren/repo/<name>/`. The first one that answers with an HTML
+	 * document wins; its `<link rel="icon">` (any `rel` containing `icon`) is
+	 * resolved against the page URL and inlined as a data URI so consumers issue
+	 * no extra request.
+	 *
+	 * Returns "" when the site is unreachable, publishes no HTML, or declares no
+	 * icon — an omission, never a guess. This is why a repository with no site
+	 * simply keeps its repository icon.
+	 */
+	async function readSiteIcon(name, hasPages) {
+		// Candidate publishing layouts. Six arrangements coexist in this cluster:
+		// the mirror tree (`/repo/<name>/`), a top-level slot named after the
+		// repository (`/Mijo/`), a top-level slot named after the site
+		// (`/Bahnhof/` — repo is `isui.ren-Bahnhof`), and GitHub Pages. Probing all
+		// of them is what lets an icon be found regardless of which one a repo used.
+		const shortName = name.replace(/^isui\.ren-/, "");
+		const candidates = [
+			`https://isui.ren/repo/${name}/`,
+			`https://isui.ren/${name}/`,
+			...(shortName !== name ? [`https://isui.ren/${shortName}/`] : []),
+			...(hasPages ? [`https://${owner.toLowerCase()}.github.io/${name}/`] : []),
+		];
+		for (const pageUrl of candidates) {
+			let html;
+			try {
+				const response = await fetch(pageUrl, {
+					headers: { "User-Agent": "repo-inventory/1.0", Accept: "text/html,*/*" },
+					signal: AbortSignal.timeout(SITE_ICON_TIMEOUT_MS),
+				});
+				if (!response.ok) continue;
+				const type = response.headers.get("content-type") ?? "";
+				if (!/html/i.test(type) && !/html/i.test(await peek(response))) continue;
+				html = await response.text();
+			} catch {
+				continue;
+			}
+			const href = extractIconHref(html);
+			if (!href) continue;
+			let iconUrl;
+			try {
+				iconUrl = new URL(href, pageUrl).toString();
+			} catch {
+				continue;
+			}
+			const inlined = await inlineRemoteIcon(iconUrl);
+			if (inlined) return inlined;
+		}
+		return "";
+	}
+
+	/** Read a response's first bytes without consuming the body for the caller. */
+	async function peek(response) {
+		try {
+			const clone = response.clone();
+			const buf = await clone.arrayBuffer();
+			return new TextDecoder().decode(buf.slice(0, 512));
+		} catch {
+			return "";
+		}
+	}
+
+	/**
+	 * Pull an icon path out of an HTML document. Handles the three shapes that
+	 * actually occur: `<link rel="icon" href="...">`, `rel="shortcut icon"`, and
+	 * the attribute order reversed. Deliberately not a full HTML parser — the
+	 * input is one `<head>` of a static site.
+	 */
+	function extractIconHref(html) {
+		const linkTags = html.match(/<link\b[^>]*>/gi) ?? [];
+		for (const tag of linkTags) {
+			const rel = /\brel\s*=\s*["']?([^"'>]+)["']?/i.exec(tag);
+			if (!rel || !/icon/i.test(rel[1])) continue;
+			const href = /\bhref\s*=\s*["']([^"']+)["']/i.exec(tag);
+			if (href && !href[1].startsWith("data:")) return href[1];
+		}
+		return "";
+	}
+
+	/** Fetch a remote icon and inline it, guarding size and content type. */
+	async function inlineRemoteIcon(url) {
+		let response;
+		try {
+			response = await fetch(url, {
+				headers: { "User-Agent": "repo-inventory/1.0" },
+				signal: AbortSignal.timeout(SITE_ICON_TIMEOUT_MS),
+			});
+		} catch {
+			return "";
+		}
+		if (!response.ok) return "";
+		const type = (response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+		if (!type.startsWith("image/")) return "";
+		if (type === "image/svg+xml") {
+			const text = await response.text();
+			if (text.length > MAX_ICON_BYTES) return "";
+			return `data:image/svg+xml;base64,${Buffer.from(text, "utf8").toString("base64")}`;
+		}
+		const buf = Buffer.from(await response.arrayBuffer());
+		if (buf.byteLength > MAX_ICON_BYTES) return "";
+		return `data:${type};base64,${buf.toString("base64")}`;
+	}
 
 	/**
 	 * Read one repository's icon and inline it as a data URI. Tries each
@@ -219,6 +373,16 @@ function makeAdapter({ api, owner, mirrorRepo, mirrorBranch, mirrorDir, token })
 				language: typeof repo.language === "string" ? repo.language : null,
 				url: typeof repo.html_url === "string" ? repo.html_url : "",
 				icon: await readIcon(name),
+				// Site icon wins over the repository icon in every consumer: a
+				// project's public face is its site. Both are inlined so the page
+				// issues no extra request either way.
+				siteIcon: await readSiteIcon(name, hasPages),
+				category: inferCategory({
+					name,
+					hasPages,
+					language: typeof repo.language === "string" ? repo.language : null,
+					description: typeof repo.description === "string" ? repo.description : "",
+				}),
 			};
 		},
 
